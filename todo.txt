@@ -1,0 +1,2 @@
+get chatgpt broker working
+get library set up so you can import it and make a pipeline object

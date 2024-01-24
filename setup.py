@@ -20,7 +20,7 @@ setup(
         'Operating System :: OS Independent'
     ],
     install_requires=[
-        # future dependencies go here
+        'openai>=1.9.0,<2.0.0'
     ],
     python_requires = '>=3.8, <4'
 )

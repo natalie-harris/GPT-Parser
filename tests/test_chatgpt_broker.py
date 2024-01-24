@@ -15,10 +15,14 @@ class TestChatGPTBroker(unittest.TestCase):
         self.api_key = "test_api_key"
         self.broker = ChatGPTBroker(self.api_key)
 
-    @patch('chatgpt_broker.openai.ChatCompletion.create')
-    def test_get_chatgpt_response(self):
-        response = self.broker.get_chatgpt_response("", "", "", 1000)
-        self.assertEqual(response, "test")
+    @patch('openai.ChatCompletion.create')
+    def test_get_chatgpt_response(self, mock_create):
+        mock_create.return_value = "Test return"
+
+        response = self.broker.get_chatgpt_response("You are a helpful assistant that responds in beep boop computer language.", "How far away is the sun?", "gpt-3.5-turbo-1106", 16385)
+        self.assertEqual(response, "Test return")
+
+        mock_create.assert_called()
 
 if __name__ == '__main__':
     unittest.main()
