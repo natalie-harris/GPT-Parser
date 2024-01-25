@@ -1,6 +1,7 @@
 # gpt_parser/chatgpt_broker.py
 
 import openai
+import tiktoken
 import time
 
 class ChatGPTBroker:

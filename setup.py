@@ -5,11 +5,11 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
 setup(
-    name = 'GPT Parser',
+    name = 'GPTPipeline',
     version = '0.0.0',
     author = 'Natalie Harris',
     author_email = 'mzg857@vols.utk.edu',
-    description = 'Python library that helps generate a gpt-enabled data processing pipeline',
+    description = 'ChatGPT-enabled data processing pipelines',
     long_description = long_description,
     long_description_content_type = 'text/markdown',
     url = 'https://github.com/natalie-harris/GPT-Parser',
