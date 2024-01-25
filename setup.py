@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
 setup(
-    name = 'GPTPipeline',
+    name = 'gptpipeline',
     version = '0.0.0',
     author = 'Natalie Harris',
     author_email = 'mzg857@vols.utk.edu',
