@@ -23,7 +23,7 @@ class GPTPipeline:
         # Set all modules to asyncronously process until all of them no longer have any uncompleted processing tasks
 
         for module in self.modules:
-            input_data = module.process(input_data)
+            input_data = self.modules[module].process(input_data)
         return input_data
     
     def print_modules(self):

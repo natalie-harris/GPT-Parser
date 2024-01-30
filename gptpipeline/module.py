@@ -16,14 +16,26 @@ Two Types of Input Dataframe Format:
 
 NOTE: allow for custom Complete feature name in case multiple modules are accessing the same df
 """
-class GPTSinglePrompt_Module(Module):
+
+class GPTModule(Module):
+    def __init__(self, gpt_config):
+        self.gpt_config = gpt_config
+
+    @abstractmethod
+    def process(self, input_data):
+        pass
+
+    def make_gpt_request(self, openai_request):
+        pass
+
+class GPTSinglePrompt_Module(GPTModule):
     def __init__(self, gpt_config):
         self.gpt_config = gpt_config
     
     def process(self, input_data):
         return "Single module processed: " + input_data
 
-class GPTMultiPrompt_Module(Module):
+class GPTMultiPrompt_Module(GPTModule):
     def __init__(self, gpt_config):
         self.gpt_config = gpt_config
 
@@ -32,12 +44,14 @@ class GPTMultiPrompt_Module(Module):
         return "Multi module processed: " + input_data
     
 """
-Code Modules can take in zero or more dataframes as input and write to a dataframe as output. They can be in any format
+Code Modules can take in zero or more dataframes as input and write to multiple dataframes as output. They can be in any format
 """
 class Code_Module(Module):
-    def __init__(self, code_config):
+    def __init__(self, code_config, process_function):
         self.code_config = code_config
+        self.process_function = process_function
 
     def process(self, input_data):
-        # Code specific processing logic
-        return "Code processed: " + input_data
+        # Call the provided function with input_data
+        processed_data = self.process_function(input_data)
+        return processed_data
