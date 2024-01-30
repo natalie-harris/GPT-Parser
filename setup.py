@@ -20,7 +20,8 @@ setup(
         'Operating System :: OS Independent'
     ],
     install_requires=[
-        'openai>=1.9.0,<2.0.0'
+        'openai>=1.9.0,<2.0.0',
+        'pandas>=2.2.0,<3.0.0'
     ],
     python_requires = '>=3.8, <4'
 )
