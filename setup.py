@@ -21,7 +21,8 @@ setup(
     ],
     install_requires=[
         'openai>=1.9.0,<2.0.0',
-        'pandas>=2.2.0,<3.0.0'
+        'pandas>=2.2.0,<3.0.0',
+        'tqdm>=4.66.0,<5.0.0'
     ],
     python_requires = '>=3.8, <4'
 )

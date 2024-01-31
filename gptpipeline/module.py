@@ -23,22 +23,35 @@ class Valve_Module(Module):
     def __init__(self, pipeline, valve_config):
         self.valve_config = valve_config
 
-        max_files_total = 10
-        max_files_at_once = 3
-        current_files = 0
+        self.max_files_total = 10
+        self.max_files_at_once = 3
+        self.current_files = 0
+        self.total_ran_files = 0
 
         self.input_df = pipeline.get_df("Files List")
         self.output_df = pipeline.get_df("Text List")
+
+        # Make sure we don't try to access files that don't exist
+        files_left = self.input_df[0][self.input_df[0]['Completed'] == 0]['File Path'].nunique()
+        if (files_left < self.max_files_total):
+            print(f"Only {files_left} unprocessed files remaining. Only processing {files_left} for this execution.")
+            self.max_files_total = files_left
+            if (files_left < self.max_files_at_once):
+                self.max_files_at_once = files_left
+
         print(self.input_df[0])
         print(self.output_df[0])
 
     def process(self, input_data):
     
-        # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
-        current_files = self.output_df[0][self.output_df[0]['Completed'] == 0]['Source File'].nunique()
-        print("Number of files not completed yet: " + str(current_files))
+        while (self.current_files < self.max_files_at_once and self.total_ran_files < self.max_files_total):
 
-        
+            # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
+            self.current_files = self.output_df[0][self.output_df[0]['Completed'] == 0]['Source File'].nunique()
+            print("Number of files not completed yet: " + str(self.current_files))
+
+            # add one file from files list to text list at a time
+            # Implement this
 
         return "Finished processing!"
 
