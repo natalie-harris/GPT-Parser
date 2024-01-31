@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import pandas as pd
 
 class Module(ABC):
     def __init__(self, pipeline, module_config):
@@ -32,26 +33,45 @@ class Valve_Module(Module):
         self.output_df = pipeline.get_df("Text List")
 
         # Make sure we don't try to access files that don't exist
-        files_left = self.input_df[0][self.input_df[0]['Completed'] == 0]['File Path'].nunique()
+        files_left = self.input_df[self.input_df['Completed'] == 0]['File Path'].nunique()
         if (files_left < self.max_files_total):
             print(f"Only {files_left} unprocessed files remaining. Only processing {files_left} for this execution.")
             self.max_files_total = files_left
             if (files_left < self.max_files_at_once):
                 self.max_files_at_once = files_left
 
-        print(self.input_df[0])
-        print(self.output_df[0])
+        print(self.input_df)
+        print(self.output_df)
 
     def process(self, input_data):
     
         while (self.current_files < self.max_files_at_once and self.total_ran_files < self.max_files_total):
 
             # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
-            self.current_files = self.output_df[0][self.output_df[0]['Completed'] == 0]['Source File'].nunique()
-            print("Number of files not completed yet: " + str(self.current_files))
+            self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
+            print(f"Number of files not completed yet: {self.current_files}")
 
             # add one file from files list to text list at a time
             # Implement this
+            unprocessed_df = self.input_df[self.input_df['Completed'] == 0]
+
+            if len(unprocessed_df) is False:
+                break
+
+            entry = unprocessed_df.head(1)
+            path = entry['File Path'].iloc[0]
+            print(f"Path of entry: {path}")
+            with open(path, 'r') as file:
+                file_contents = file.read()
+            print(f"File contents: {file_contents}")
+
+            new_entry = pd.DataFrame({
+                "Source File": [path], 
+                "Full Text": [file_contents], 
+                "Completed": [False]
+            })
+
+            self.output_df = pd.concat([self.output_df, new_entry])
 
         return "Finished processing!"
 

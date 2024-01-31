@@ -1,2 +1,2 @@
 File Path,Completed,test_feature,test_string_feature
-./corpus/one.text,0,0,Oh man
+./corpus/one.text,False,0,Oh man

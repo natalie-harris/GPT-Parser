@@ -8,7 +8,7 @@ class GPTPipeline:
         self.dfs = {} # {name: (df, dest_path)}
 
     def get_df(self, name):
-        return self.dfs[name]
+        return self.dfs[name][0]
 
     def add_module(self, name, module):
         if not isinstance(module, Module):
