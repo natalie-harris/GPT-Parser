@@ -1,12 +1,48 @@
 from abc import ABC, abstractmethod
 
 class Module(ABC):
-    def __init__(self, module_config):
+    def __init__(self, pipeline, module_config):
         self.module_config = module_config
 
     @abstractmethod
     def process(self, input_data):
         pass
+
+"""
+Valve Module is placed between file df and text df
+It limits the amount of texts in text df to n texts, to make sure we don't use up all our memory
+
+Text df automatically deletes texts that are processed (unless specified to save to disk by user)
+
+Internal State:
+Max files to read from
+Number of files read
+"""
+
+class Valve_Module(Module):
+    def __init__(self, pipeline, valve_config):
+        self.valve_config = valve_config
+
+        max_files_total = 10
+        max_files_at_once = 3
+        current_files = 0
+
+        self.input_df = pipeline.get_df("Files List")
+        self.output_df = pipeline.get_df("Text List")
+        print(self.input_df[0])
+        print(self.output_df[0])
+
+    def process(self, input_data):
+    
+        # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
+        current_files = self.output_df[0][self.output_df[0]['Completed'] == 0]['Source File'].nunique()
+        print("Number of files not completed yet: " + str(current_files))
+
+        
+
+        return "Finished processing!"
+
+    
 
 """
 GPT Modules take in a dataframe as input and write to a dataframe as output. 
@@ -17,8 +53,8 @@ Two Types of Input Dataframe Format:
 NOTE: allow for custom Complete feature name in case multiple modules are accessing the same df
 """
 
-class GPTModule(Module):
-    def __init__(self, gpt_config):
+class GPT_Module(Module):
+    def __init__(self, pipeline, gpt_config):
         self.gpt_config = gpt_config
 
     @abstractmethod
@@ -28,14 +64,14 @@ class GPTModule(Module):
     def make_gpt_request(self, openai_request):
         pass
 
-class GPTSinglePrompt_Module(GPTModule):
-    def __init__(self, gpt_config):
+class GPTSinglePrompt_Module(GPT_Module):
+    def __init__(self, pipeline, gpt_config):
         self.gpt_config = gpt_config
     
     def process(self, input_data):
         return "Single module processed: " + input_data
 
-class GPTMultiPrompt_Module(GPTModule):
+class GPTMultiPrompt_Module(GPT_Module):
     def __init__(self, gpt_config):
         self.gpt_config = gpt_config
 
@@ -47,7 +83,7 @@ class GPTMultiPrompt_Module(GPTModule):
 Code Modules can take in zero or more dataframes as input and write to multiple dataframes as output. They can be in any format
 """
 class Code_Module(Module):
-    def __init__(self, code_config, process_function):
+    def __init__(self, pipeline, code_config, process_function):
         self.code_config = code_config
         self.process_function = process_function
 

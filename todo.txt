@@ -1,2 +1,3 @@
-get chatgpt broker working
-get library set up so you can import it and make a pipeline object
+pipeline class needs primary folder to save dfs to when there is no custom folder specified
+save file is <df_name>_<date and time>.csv
+need to make sure that we save the csvs in a way that can be properly read (properly escape commas, backslashes)
