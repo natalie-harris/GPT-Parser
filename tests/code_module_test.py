@@ -12,4 +12,7 @@ pipeline.import_csv("test_csv.csv", "/Users/natalieharris/UTK/NIMBioS/GPTPipelin
 # pipeline.print_dfs()
 
 result = pipeline.process("Testing code config", 10)
+
+pipeline.print_dfs()
+
 print(result)
