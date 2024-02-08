@@ -42,7 +42,7 @@ def generate_primary_csv(dest_csv_path, csv_file_name, folder_path, **default_fe
     rows_to_add = []
     for file_path in glob.glob(f"{folder_path}/*.txt") + glob.glob(f"{folder_path}/*.text"):
         # Create a new row with default values, setting 'File Path' and 'Complete'
-        new_row = {'File Path': file_path, 'Complete': 0}
+        new_row = {'File Path': file_path, 'Completed': 0}
         new_row.update(default_features)
         rows_to_add.append(new_row)
 

@@ -5,7 +5,10 @@ def Module_2_Fnc(input_data):
     now = datetime.now()
     return "Received " + input_data + " at " + now.strftime("%Y-%m-%d %H:%M:%S")
 
-pipeline = GPTPipeline()
+with open("/Users/natalieharris/UTK/NIMBioS/GPTPipeline/openai_key.txt", "r") as fd:
+    api_key = fd.read()
+
+pipeline = GPTPipeline(api_key)
 pipeline.import_texts("/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/test_csv.csv", 1)
 pipeline.add_module("Module 2", Code_Module(pipeline=pipeline, code_config="some_code_config", process_function=Module_2_Fnc))
 pipeline.import_csv("test_csv.csv", "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/")
@@ -13,6 +16,6 @@ pipeline.import_csv("test_csv.csv", "/Users/natalieharris/UTK/NIMBioS/GPTPipelin
 
 result = pipeline.process("Testing code config", 10)
 
-pipeline.print_dfs()
+# pipeline.print_dfs()
 
 print(result)

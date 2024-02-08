@@ -3,9 +3,10 @@ from pathlib import Path
 import pandas as pd
 
 class GPTPipeline:
-    def __init__(self):
+    def __init__(self, api_key):
         self.modules = {} # {name: module}
         self.dfs = {} # {name: (df, dest_path)}
+        self.api_key = api_key
 
     def get_df(self, name):
         return self.dfs[name][0]
@@ -50,11 +51,13 @@ class GPTPipeline:
         # Put max_texts (or all texts if total < max_texts) texts into primary df (add completed feature = 0)
         # Use multiple GPT by bridging with code module, or just use single GPT module
 
-        # Set all modules to asyncronously process until all of them no longer have any uncompleted processing tasks
-
-        for module in self.modules:
-            input_data = self.modules[module].process(input_data)
-        return input_data
+        # Set all modules to sequentially process until all of them no longer have any uncompleted processing tasks
+        working = True
+        while working is True:
+            working = False
+            for module in self.modules:
+                working = self.modules[module].process(input_data)
+        return "Finished!"
     
     def print_modules(self):
         print(self.modules)

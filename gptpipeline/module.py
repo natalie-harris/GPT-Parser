@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import pandas as pd
+import time
 
 class Module(ABC):
     def __init__(self, pipeline, module_config):
@@ -17,15 +18,17 @@ Text df automatically deletes texts that are processed (unless specified to save
 
 Internal State:
 Max files to read from
+Max files that can be in output_df at a time
 Number of files read
+Number of unprocessed files currently in output_df
 """
 
 class Valve_Module(Module):
     def __init__(self, pipeline, valve_config):
         self.valve_config = valve_config
 
-        self.max_files_total = 10
-        self.max_files_at_once = 3
+        self.max_files_total = 1000
+        self.max_files_at_once = 1
         self.current_files = 0
         self.total_ran_files = 0
 
@@ -34,46 +37,66 @@ class Valve_Module(Module):
 
         # Make sure we don't try to access files that don't exist
         files_left = self.input_df[self.input_df['Completed'] == 0]['File Path'].nunique()
-        if (files_left < self.max_files_total):
-            print(f"Only {files_left} unprocessed files remaining. Only processing {files_left} for this execution.")
+        if files_left == 0:
+            print("There are no files left to be processed.")
+        elif (files_left < self.max_files_total):
+            file_plural = "file" if files_left == 1 else "files"
+            print(f"Only {files_left} unprocessed {file_plural} remaining. Only processing {files_left} {file_plural} on this execution.")
             self.max_files_total = files_left
             if (files_left < self.max_files_at_once):
                 self.max_files_at_once = files_left
 
-        print(self.input_df)
-        print(self.output_df)
+        # print(self.input_df)
+        # print(self.output_df)
 
     def process(self, input_data):
+
+        working = False
     
+        # print("in valve process!")
+        self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
         while (self.current_files < self.max_files_at_once and self.total_ran_files < self.max_files_total):
 
+            working = True
+
+            # print(f"{self.current_files} < {self.max_files_at_once};\t\t{self.total_ran_files} < {self.max_files_total}")
+            # print("in valve process!")
+
             # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
-            self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
-            print(f"Number of files not completed yet: {self.current_files}")
+            # print(self.output_df)
+            # print(f"Number of files not completed yet: {self.current_files}")
 
             # add one file from files list to text list at a time
-            # Implement this
-            unprocessed_df = self.input_df[self.input_df['Completed'] == 0]
-
-            if len(unprocessed_df) is False:
+            has_unprocessed_files = (self.input_df['Completed'] == False).any()
+            if not has_unprocessed_files:
                 break
 
-            entry = unprocessed_df.head(1)
-            path = entry['File Path'].iloc[0]
-            print(f"Path of entry: {path}")
+            # Find the index of the first entry where 'Completed' is False
+            row_index = self.input_df[self.input_df['Completed'] == False].index[0]
+            # Set the 'Completed' feature of that entry to True
+            self.input_df.at[row_index, 'Completed'] = 1
+
+            # Get the text at the file referenced in File Path
+            entry = self.input_df.loc[row_index]
+            path = entry['File Path']
+            # print(f"Path of entry: {path}")
             with open(path, 'r') as file:
                 file_contents = file.read()
-            print(f"File contents: {file_contents}")
+            # print(f"File contents: {file_contents}")
 
-            new_entry = pd.DataFrame({
-                "Source File": [path], 
-                "Full Text": [file_contents], 
-                "Completed": [False]
-            })
+            new_entry = [path, file_contents, 0]
+            self.output_df.loc[len(self.output_df)] = new_entry
+            # self.output_df = pd.concat([self.output_df, new_entry])
+            self.total_ran_files += 1
 
-            self.output_df = pd.concat([self.output_df, new_entry])
+            time.sleep(1)
+            self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
 
-        return "Finished processing!"
+            # print(f"Output df: [[[\n{self.output_df}\n]]]")
+
+        # print(f"{self.current_files} < {self.max_files_at_once};\t\t{self.total_ran_files} < {self.max_files_total}")
+
+        return working
 
     
 

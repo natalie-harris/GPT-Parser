@@ -1,8 +1,10 @@
 from gptpipeline import GPTPipeline, generate_primary_csv, GPTSinglePrompt_Module, GPTMultiPrompt_Module, Code_Module
 
-generate_primary_csv("./corpus", "test_csv.csv", "./corpus", **{"test_feature": 0, "test_string_feature": "Oh man"})
+with open("../openai_key.txt", "r") as fd:
+    api_key = fd.read()
 
-pipeline = GPTPipeline()
+generate_primary_csv("./corpus", "test_csv.csv", "./corpus", **{"test_feature": 0, "test_string_feature": "Oh man"})
+pipeline = GPTPipeline(api_key)
 gpt_module = GPTSinglePrompt_Module(gpt_config="some_gpt_config")
 code_module = Code_Module(code_config="some_code_config")
 
