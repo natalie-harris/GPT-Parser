@@ -1,4 +1,6 @@
-from .module import Module, Valve_Module
+from .module import Module, Valve_Module, GPTSinglePrompt_Module, GPTMultiPrompt_Module, Code_Module
+from .chatgpt_broker import ChatGPTBroker
+from .helper_functions import truncate
 from pathlib import Path
 import pandas as pd
 
@@ -6,7 +8,7 @@ class GPTPipeline:
     def __init__(self, api_key):
         self.modules = {} # {name: module}
         self.dfs = {} # {name: (df, dest_path)}
-        self.api_key = api_key
+        self.gpt_broker = ChatGPTBroker(api_key)
 
     def get_df(self, name):
         return self.dfs[name][0]
@@ -16,7 +18,14 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_df(self, name, dest_path, features):
+    def add_gpt_singleprompt_module(self, name, config):
+        gpt_module = GPTSinglePrompt_Module(pipeline=self, gpt_config=config)
+        self.modules[name] = gpt_module
+
+    def add_gpt_multiprompt_module(self, name, config):
+        gpt_module = GPTMultiPrompt_Module(pipeline=self, gpt_config=config)
+
+    def add_df(self, name, dest_path, features=['Text', 'Completed']):
         df = pd.DataFrame(columns=features)
         self.dfs[name] = (df, dest_path)
 
@@ -57,13 +66,23 @@ class GPTPipeline:
             working = False
             for module in self.modules:
                 working = self.modules[module].process(input_data)
-        return "Finished!"
+        print("Finished!")
     
     def print_modules(self):
         print(self.modules)
  
     def print_dfs(self):
-        print(self.dfs)
-        # for df in self.dfs:
-        #     print('%s > Destination Path: \n' % (df), end='')
-        #     # print('')
+        for df in self.dfs:
+            print(f"\n{df}:\n {self.dfs[df][0]}")
+            # print('')
+
+    def print_df(self, name):
+        print(self.dfs[name])
+
+    def print_files_df(self):
+        print(self.dfs["Files List"])
+    
+    def print_text_df(self):
+        text_df = self.dfs["Text List"][0]
+        for i in range(len(text_df)):
+            print(f"Path: {text_df.at[i, 'Source File']}   Full Text: {truncate(text_df.at[i, 'Full Text'], 49)}   Completed: {text_df.at[i, 'Completed']}")

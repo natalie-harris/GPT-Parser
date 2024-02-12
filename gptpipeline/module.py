@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 import time
+from .helper_functions import get_incomplete_entries, truncate
 
 class Module(ABC):
     def __init__(self, pipeline, module_config):
@@ -52,19 +53,12 @@ class Valve_Module(Module):
     def process(self, input_data):
 
         working = False
-    
-        # print("in valve process!")
+
+        # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
         self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
         while (self.current_files < self.max_files_at_once and self.total_ran_files < self.max_files_total):
 
             working = True
-
-            # print(f"{self.current_files} < {self.max_files_at_once};\t\t{self.total_ran_files} < {self.max_files_total}")
-            # print("in valve process!")
-
-            # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
-            # print(self.output_df)
-            # print(f"Number of files not completed yet: {self.current_files}")
 
             # add one file from files list to text list at a time
             has_unprocessed_files = (self.input_df['Completed'] == False).any()
@@ -79,10 +73,8 @@ class Valve_Module(Module):
             # Get the text at the file referenced in File Path
             entry = self.input_df.loc[row_index]
             path = entry['File Path']
-            # print(f"Path of entry: {path}")
-            with open(path, 'r') as file:
+            with open(path, 'r', encoding='utf-8') as file:
                 file_contents = file.read()
-            # print(f"File contents: {file_contents}")
 
             new_entry = [path, file_contents, 0]
             self.output_df.loc[len(self.output_df)] = new_entry
@@ -120,12 +112,62 @@ class GPT_Module(Module):
     def make_gpt_request(self, openai_request):
         pass
 
+"""
+gpt_config: dictionary: {
+        input_df (str)
+        output_df (str)
+        delete (bool)
+        model (str)
+        context_window (int)
+        temp (float)
+        prompt (str)
+        examples (dict) # not implemented yet
+    }
+"""
 class GPTSinglePrompt_Module(GPT_Module):
+
+    # USE .get() WHEN WE CAN USE DEFAULT VALUES INSTEAD (NOT FOR INPUT/OUTPUT DFS)
     def __init__(self, pipeline, gpt_config):
-        self.gpt_config = gpt_config
-    
+        self.config = gpt_config
+        self.pipeline = pipeline
+        
+        self.input_df_name = self.config['input df']
+        self.output_df_name = self.config['output df']
+
+        self.prompt = self.config['prompt']
+        self.examples = self.config.get('examples', [])
+
+        self.delete = self.config.get('delete', False)
+        
+        self.model = self.config.get('model', 'default')
+        self.context_window = self.config.get('context window', 'default')
+
+        self.input_text_column = self.config.get('input text column', 'Text')
+        self.input_completed_column = self.config.get('input completed column', 'Completed')
+        self.output_text_column = self.config.get('output text column', 'Text')
+        self.output_completed_column = self.config.get('output completed column', 'Completed')
+
     def process(self, input_data):
-        return "Single module processed: " + input_data
+        working = False
+
+        input_df = self.pipeline.get_df(self.input_df_name)
+        output_df = self.pipeline.get_df(self.output_df_name)
+        incomplete_df = get_incomplete_entries(input_df, self.input_completed_column)
+
+        if len(incomplete_df) > 0:
+            entry_index = incomplete_df.index[0]
+            entry = input_df.iloc[entry_index]
+            text = entry[self.input_text_column]
+            input_df.at[entry_index, self.input_completed_column] = 1
+
+            print(truncate(text, 49))
+
+            new_entry = ['Response!', 0]
+            output_df.loc[len(output_df)] = new_entry
+
+            working = True
+
+        return working
 
 class GPTMultiPrompt_Module(GPT_Module):
     def __init__(self, gpt_config):

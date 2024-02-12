@@ -17,7 +17,7 @@ import os
 
 def replace_path_if_windows(file_path, old_part, new_part):
     # Check if the current OS is Windows
-    print(os.name)
+    # print(os.name)
     if os.name == 'nt':
         # Replace the old part with the new part
         new_file_path = file_path.replace(old_part, new_part)
@@ -32,10 +32,33 @@ openai_key_path = replace_path_if_windows("/Users/natalieharris/UTK/NIMBioS/GPTP
 with open(openai_key_path, "r") as fd:
     api_key = fd.read()
 
+# setup basic pipeline
 pipeline = GPTPipeline(api_key)
 generate_primary_csv(books_folder_path, "ebooks_updated.csv", books_folder_path, **{})
 pipeline.import_texts(books_folder_path + "ebooks_updated.csv", 100)
+
+# add gpt single prompt module
+"""
+self.config = gpt_config
+        self.input_df = self.config['input df']
+        self.output_df = self.config['output df']
+        self.prompt = self.config['prompt']
+        self.examples = self.config.get('examples', [])
+        self.delete = self.config.get('delete', False)
+        self.model = self.config.get('model', 'default')
+        self.context_window = self.config.get('context window', 'default')
+"""
+gpt_config = {
+    'input df': 'Text List',
+    'output df': 'GPT Output',
+    'prompt': 'Just respond with \'yes\' to this request please! Nothing else :)',
+    'input text column': 'Full Text'
+}
+pipeline.add_gpt_singleprompt_module("gpt module", gpt_config)
+pipeline.add_df('GPT Output', replace_path_if_windows("/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/gpt_output", "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/", "E:\\NIMBioS\\GPT Parser\\tests\corpus\\books\\"))
+
 pipeline.process("Placeholder Data", 100)
 
 # pipeline.print_modules()
+pipeline.print_dfs()
 pipeline.print_text_df()

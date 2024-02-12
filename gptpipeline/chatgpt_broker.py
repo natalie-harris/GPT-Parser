@@ -8,6 +8,51 @@ class ChatGPTBroker:
     def __init__(self, api_key):
         self.api_key = api_key
 
+    def get_tokenized_length(self, system_message, user_message, model, examples=[]):
+        """
+        Calculate the number of tokens that a text string will be tokenized into 
+        by a specific model. Optionally, additional content can be appended to the 
+        text from a list of example dictionaries.
+        
+        Parameters:
+        text (str): The input text string to be tokenized.
+        model (str): The name or identifier of the model whose tokenizer will be used.
+        examples (list of dict, optional): A list of dictionaries where each dictionary 
+                                        should have a key "content" with text to append 
+                                        to the input text string. Defaults to an empty list.
+        
+        Returns:
+        int: The number of tokens the input text (plus additional content, if provided) 
+            is tokenized into by the specified model.
+        """
+        
+        total_text = system_message + user_message
+
+        # Loop through the list of example dictionaries (if provided)
+        # and append the content of each example to the input text.
+        for example in examples:
+            total_text += example["content"]
+        
+        # Get the encoding (tokenizer) associated with the specified model.
+        encoding = tiktoken.encoding_for_model(model)
+        
+        # Use the encoding (tokenizer) to tokenize the text
+        # and then calculate the number of tokens in the tokenized text.
+        num_tokens = len(encoding.encode(total_text))
+        
+        # Return the number of tokens in the tokenized text.
+        return num_tokens
+    
+    # safety multipliers limits max message length just in case tiktoken incorrectly splits tokens
+    def split_message_to_lengths(self, system_message, user_message, model, max_context_window, examples=[], safety_multiplier=1.0):
+        total_token_length = self.get_tokenized_length(system_message, user_message, model, examples)
+        if total_token_length <= max_context_window * safety_multiplier:
+            return [system_message, user_message, examples]
+        
+        # else we need to split up the message into chunks. I may have a function that does this in original SBW parser
+        return []
+
+
     def get_chatgpt_response(self, system_message, user_message, model, model_context_window, temp=0, examples=[], timeout=15):
         """
         Get a response from ChatGPT based on the user and system messages.
@@ -25,18 +70,7 @@ class ChatGPTBroker:
         - str: The generated response from the GPT model.
         """
 
-        # Combine the system and user messages to evaluate their total tokenized length
-        total_message = system_message + user_message
-        
-        # Select the appropriate GPT model based on the use_gpt4 flag and tokenized length
-        # if use_gpt4:
-        #     num_tokens = get_tokenized_length(total_message, 'gpt-4', examples)
-        #     gpt_model = 'gpt-4'
-        # else:
-        #     num_tokens = get_tokenized_length(total_message, 'gpt-3.5-turbo', examples)
-        #     gpt_model = 'gpt-3.5-turbo' if num_tokens < 4096 else 'gpt-3.5-turbo-16k'
-
-        num_tokens = 10
+        tokenized_length = self.get_tokenized_length(system_message, user_message, model, examples)
         
         # Prepare the messages to send to the Chat API
         new_messages = [{"role": "system", "content": system_message}]
