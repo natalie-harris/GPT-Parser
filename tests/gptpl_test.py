@@ -34,8 +34,8 @@ with open(openai_key_path, "r") as fd:
 
 # setup basic pipeline
 pipeline = GPTPipeline(api_key)
-generate_primary_csv(books_folder_path, "ebooks_updated.csv", books_folder_path, **{})
-pipeline.import_texts(books_folder_path + "ebooks_updated.csv", 100)
+generate_primary_csv(books_folder_path, "ebooks.csv", books_folder_path, **{})
+pipeline.import_texts(books_folder_path + "ebooks.csv", 100)
 
 # add gpt single prompt module
 """

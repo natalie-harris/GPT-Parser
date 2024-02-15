@@ -162,6 +162,14 @@ class GPTSinglePrompt_Module(GPT_Module):
 
             print(truncate(text, 49))
 
+            # Put a chatgpt broker call here
+            # how does a call have to work?
+            # send entire (long) text, break up into chunks, process each system message, user message chunk, examples
+            # put each response in its own line in outbreak df, meaning we need to return list of each individual response from gpt broker 
+            # then we need to add each entry to output_df
+
+            # ALSO CHECK IF SYSTEM MESSAGE + EXAMPLES >= CONTEXT LENGTH
+
             new_entry = ['Response!', 0]
             output_df.loc[len(output_df)] = new_entry
 
