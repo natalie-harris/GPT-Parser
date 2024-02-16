@@ -26,6 +26,8 @@ class GPTPipeline:
         for key, value in default_values.items():
             if key in self.default_vals:
                 self.default_vals[key] = value
+            else:
+                print(f"'{key}' is not a valid variable name.")
 
     def get_df(self, name):
         return self.dfs[name][0]
@@ -117,6 +119,12 @@ class GPTPipeline:
             timeout = self.default_vals['timeout']
         if not isinstance(safety_multiplier, float) or safety_multiplier < 0.0:
             safety_multiplier = self.default_vals['safety multiplier']    
+
+        # make sure breaking up into chunks is even possible given system message and examples token length
+        static_token_length = ChatGPTBroker.get_tokenized_length(system_message, '', model, examples)
+        if static_token_length >= int(model_context_window * safety_multiplier):
+            print(f"The system message and examples are too long for the maximum token length ({int(model_context_window * safety_multiplier)})")
+            return ['GPT API call failed.']
 
         text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, safety_multiplier)
         print(text_chunks)

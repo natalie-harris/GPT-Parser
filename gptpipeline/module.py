@@ -182,8 +182,7 @@ class GPTSinglePrompt_Module(GPT_Module):
 
             if len(responses) != 0:
                 input_df.at[entry_index, self.input_completed_column] = 1
-
-            working = True
+                working = True
 
         return working
 

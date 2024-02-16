@@ -57,14 +57,43 @@ class ChatGPTBroker:
         - safety
 
         Returns:
-        - chunks (lists of strings): A list of chunks, where each chunk is a list containing the system message, a segment of the text, and the end message.
+        - chunks (list of strings): A list of chunks, where each chunk is a segment of text.
         """
+
+        static_token_length = self.get_tokenized_length(system_message, "", model, examples)
+        if static_token_length >= max_context_window:
+            return []
 
         total_token_length = self.get_tokenized_length(system_message, user_message, model, examples)
         if total_token_length <= max_context_window * safety_multiplier:
-            return [system_message, user_message, examples]
+            return [user_message]
         
+        base_multiplier = 4
+        max_user_message_tokens = max_context_window - static_token_length
+        chunks = []  # Will hold the resulting chunks of text
 
+
+        # need to finish and debug this logic later
+        i = 0  # Start index for slicing the text
+        while i < len(user_message):
+
+            # Calculate the length of a user message chunk
+            multiplier = base_multiplier
+            user_message_length = int(max_user_message_tokens * multiplier)
+
+            user_chunk = user_message[i:i+user_message_length]
+            user_chunk_length = self.get_tokenized_length('', user_chunk, model, [])
+            
+            # If the token length exceeds the max allowed, reduce the message length and recheck
+            while token_length > int(max_token_length * safety_multiplier):
+                multiplier *= 0.95
+                max_user_message_tokens = max_context_window - static_token_length
+                user_chunk = user_message[i:i+user_message_length]
+                token_length = get_tokenized_length(user_chunk, 'gpt-3.5-turbo', examples)
+            
+            # Save the chunk and move to the next segment of text
+            chunks.append([system_message, text[i:i+user_message_length] + end_message])
+            i += user_message_length
 
 
         
