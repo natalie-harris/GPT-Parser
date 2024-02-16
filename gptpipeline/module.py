@@ -81,7 +81,7 @@ class Valve_Module(Module):
             # self.output_df = pd.concat([self.output_df, new_entry])
             self.total_ran_files += 1
 
-            time.sleep(1)
+            # time.sleep(1)
             self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
 
             # print(f"Output df: [[[\n{self.output_df}\n]]]")
@@ -131,21 +131,26 @@ class GPTSinglePrompt_Module(GPT_Module):
         self.config = gpt_config
         self.pipeline = pipeline
         
+        # df config
         self.input_df_name = self.config['input df']
         self.output_df_name = self.config['output df']
-
-        self.prompt = self.config['prompt']
-        self.examples = self.config.get('examples', [])
-
-        self.delete = self.config.get('delete', False)
-        
-        self.model = self.config.get('model', 'default')
-        self.context_window = self.config.get('context window', 'default')
+        self.delete = self.config.get('delete', 'default')
 
         self.input_text_column = self.config.get('input text column', 'Text')
         self.input_completed_column = self.config.get('input completed column', 'Completed')
         self.output_text_column = self.config.get('output text column', 'Text')
         self.output_completed_column = self.config.get('output completed column', 'Completed')
+
+        # important gpt request info
+        self.prompt = self.config['prompt']
+        self.examples = self.config.get('examples', [])
+        
+        # remember to replace default vals
+        self.model = self.config.get('model', 'default')
+        self.context_window = self.config.get('context window', 'default')
+        self.temperature = self.config.get('temperature', 'default')
+        self.safety_multiplier = self.config.get('safety multiplier', 'default')
+        self.timeout = self.config.get('timeout', 'default')
 
     def process(self, input_data):
         working = False
@@ -158,7 +163,6 @@ class GPTSinglePrompt_Module(GPT_Module):
             entry_index = incomplete_df.index[0]
             entry = input_df.iloc[entry_index]
             text = entry[self.input_text_column]
-            input_df.at[entry_index, self.input_completed_column] = 1
 
             print(truncate(text, 49))
 
@@ -170,8 +174,14 @@ class GPTSinglePrompt_Module(GPT_Module):
 
             # ALSO CHECK IF SYSTEM MESSAGE + EXAMPLES >= CONTEXT LENGTH
 
-            new_entry = ['Response!', 0]
-            output_df.loc[len(output_df)] = new_entry
+            responses = self.pipeline.process_text(self.prompt, text, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier)
+
+            for response in responses:
+                new_entry = [response, 0]
+                output_df.loc[len(output_df)] = new_entry
+
+            if len(responses) != 0:
+                input_df.at[entry_index, self.input_completed_column] = 1
 
             working = True
 

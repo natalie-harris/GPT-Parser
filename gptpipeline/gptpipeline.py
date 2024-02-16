@@ -10,6 +10,23 @@ class GPTPipeline:
         self.dfs = {} # {name: (df, dest_path)}
         self.gpt_broker = ChatGPTBroker(api_key)
 
+        self.default_vals = {
+            'delete': False,
+            'model': 'No Model Specified', # make sure to check for if no model is specified 
+            'context_window': 0,
+            'temperature': 0.0,
+            'safety multiplier': .95,
+            'timeout': 15
+        }
+
+    def get_default_values(self):
+        return self.default_vals
+    
+    def set_default_values(self, default_values):
+        for key, value in default_values.items():
+            if key in self.default_vals:
+                self.default_vals[key] = value
+
     def get_df(self, name):
         return self.dfs[name][0]
 
@@ -86,3 +103,24 @@ class GPTPipeline:
         text_df = self.dfs["Text List"][0]
         for i in range(len(text_df)):
             print(f"Path: {text_df.at[i, 'Source File']}   Full Text: {truncate(text_df.at[i, 'Full Text'], 49)}   Completed: {text_df.at[i, 'Completed']}")
+
+    def process_text(self, system_message, user_message, model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default'):
+
+        # replace defaults
+        if model == 'default':
+            model = self.default_vals['model']
+        if model_context_window == 'default':
+            model_context_window = self.default_vals['context_window']
+        if not isinstance(temp, float) or temp > 1.0 or temp < 0.0:
+            temp = self.default_vals['temperature']
+        if not isinstance(timeout, int) or timeout < 0:
+            timeout = self.default_vals['timeout']
+        if not isinstance(safety_multiplier, float) or safety_multiplier < 0.0:
+            safety_multiplier = self.default_vals['safety multiplier']    
+
+        text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, safety_multiplier)
+        print(text_chunks)
+
+
+        return ["Here's some text!"]
+    
