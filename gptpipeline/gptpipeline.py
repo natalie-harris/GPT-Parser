@@ -121,14 +121,16 @@ class GPTPipeline:
             safety_multiplier = self.default_vals['safety multiplier']    
 
         # make sure breaking up into chunks is even possible given system message and examples token length
-        static_token_length = ChatGPTBroker.get_tokenized_length(system_message, '', model, examples)
+        static_token_length = self.gpt_broker.get_tokenized_length(system_message, "", model, examples)
         if static_token_length >= int(model_context_window * safety_multiplier):
             print(f"The system message and examples are too long for the maximum token length ({int(model_context_window * safety_multiplier)})")
             return ['GPT API call failed.']
 
         text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, safety_multiplier)
-        print(text_chunks)
 
+        responses = []
+        for chunk in text_chunks:
+            responses.append(self.gpt_broker.get_chatgpt_response(system_message, chunk, model, model_context_window, temp, examples, timeout))
 
-        return ["Here's some text!"]
+        return responses
     

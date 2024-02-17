@@ -60,8 +60,13 @@ class ChatGPTBroker:
         - chunks (list of strings): A list of chunks, where each chunk is a segment of text.
         """
 
+        if safety_multiplier > 1.0:
+            safety_multiplier = 1.0
+        elif safety_multiplier <= 0:
+            safety_multiplier = 0.01
+
         static_token_length = self.get_tokenized_length(system_message, "", model, examples)
-        if static_token_length >= max_context_window:
+        if static_token_length >= max_context_window * safety_multiplier:
             return []
 
         total_token_length = self.get_tokenized_length(system_message, user_message, model, examples)
@@ -72,99 +77,32 @@ class ChatGPTBroker:
         max_user_message_tokens = max_context_window - static_token_length
         chunks = []  # Will hold the resulting chunks of text
 
-
-        # need to finish and debug this logic later
+        # # need to finish and debug this logic later
         i = 0  # Start index for slicing the text
         while i < len(user_message):
+            # print(i)
 
             # Calculate the length of a user message chunk
             multiplier = base_multiplier
-            user_message_length = int(max_user_message_tokens * multiplier)
+            max_user_chunk_length = int(max_user_message_tokens * multiplier)
 
-            user_chunk = user_message[i:i+user_message_length]
+            user_chunk = user_message[i:i+max_user_chunk_length]
             user_chunk_length = self.get_tokenized_length('', user_chunk, model, [])
             
             # If the token length exceeds the max allowed, reduce the message length and recheck
-            while token_length > int(max_token_length * safety_multiplier):
+            while user_chunk_length > max_user_chunk_length:
                 multiplier *= 0.95
-                max_user_message_tokens = max_context_window - static_token_length
-                user_chunk = user_message[i:i+user_message_length]
-                token_length = get_tokenized_length(user_chunk, 'gpt-3.5-turbo', examples)
+                max_user_chunk_length = int(max_user_message_tokens * multiplier)
+                user_chunk = user_message[i:i+max_user_chunk_length]
+                user_chunk_length = self.get_tokenized_length('', user_chunk, 'gpt-3.5-turbo', [])
             
             # Save the chunk and move to the next segment of text
-            chunks.append([system_message, text[i:i+user_message_length] + end_message])
-            i += user_message_length
-
-
+            chunks.append(user_chunk)
+            i += len(user_chunk)
         
         # else we need to split up the message into chunks. I may have a function that does this in original SBW parser
-        return []
+        return chunks
     
-    #reference for splitting text
-    """
-    def build_chunk_group(system_message, text, end_message="\n\nEND\n\n", use_gpt4=False, examples=[], just_one_chunk=False, max_context_length=None):
-    """"""
-    Returns chunks of text that stay within a specified token limit.
-    
-    Args:
-    - system_message (str): The message to prepend to each chunk of text.
-    - text (str): The full text that needs to be split into chunks.
-    - end_message (str, optional): The message to append to each chunk of text.
-    - use_gpt4 (bool, optional): If true, use the token limit for GPT-4.
-    - examples (list, optional): List of examples for tokenization.
-    - just_one_chunk (bool, optional): If true, return only one chunk.
-    - max_context_length (int, optional): If not None, use specified token limit.
-
-    Returns:
-    - list: A list of chunks, where each chunk is a list containing the system message, a segment of the text, and the end message.
-    """"""
-
-    # Define initial setup values
-    system_message_length = len(system_message) + len(end_message)
-    max_token_length = 16000  # Default max token length for GPT-3
-    if use_gpt4:
-        max_token_length = 8000  # GPT-4 token limit
-    if max_context_length is not None and max_context_length <= max_token_length:
-        max_token_length = max_context_length  # Explicit token limit
-    elif max_context_length is not None:
-        print(f"Specified maximum context length is too long for GPT. Using {max_token_length} instead.")
-    
-    base_multiplier = 4
-    safety_multiplier = 0.9  # Reduce token size to avoid potential overflows due to local tokenizer differences
-
-    chunk_group = []  # Will hold the resulting chunks of text
-
-    i = 0  # Start index for slicing the text
-    while i < len(text):
-
-        # Calculate the length of a user message chunk
-        multiplier = base_multiplier
-        user_message_length = int(max_token_length * multiplier) - system_message_length
-
-        # Build initial message
-        message = system_message + text[i:i+user_message_length] + end_message
-
-        # Assume 'get_tokenized_length' is a function that returns the token count of a message
-        token_length = get_tokenized_length(message, 'gpt-3.5-turbo', examples)
-        
-        # If the token length exceeds the max allowed, reduce the message length and recheck
-        while token_length > int(max_token_length * safety_multiplier):
-            multiplier *= 0.95
-            user_message_length = int(max_token_length * multiplier) - system_message_length
-            message = system_message + text[i:i+user_message_length] + end_message
-            token_length = get_tokenized_length(message, 'gpt-3.5-turbo', examples)
-        
-        # Save the chunk and move to the next segment of text
-        chunk_group.append([system_message, text[i:i+user_message_length] + end_message])
-        i += user_message_length
-
-        # Stop if only one chunk is needed
-        if just_one_chunk:
-            break
-
-    return chunk_group
-    """
-
     def get_chatgpt_response(self, system_message, user_message, model, model_context_window, temp=0, examples=[], timeout=15):
         """
         Get a response from ChatGPT based on the user and system messages.
@@ -214,7 +152,7 @@ class ChatGPTBroker:
                 got_response = True
                 return generated_text
                 
-            except openai.error.RateLimitError as err:
+            except openai.RateLimitError as err:
                 # Handle rate limit errors
                 if 'You exceeded your current quota' in str(err):
                     print("You've exceeded your current billing quota. Go check on that!")
@@ -222,22 +160,23 @@ class ChatGPTBroker:
                 num_seconds = 3
                 print(f"Waiting {num_seconds} seconds due to high volume of {model} users.")
                 time.sleep(num_seconds)
-                
-            except openai.error.APIError as err:
-                # Handle generic API errors
-                print("An error occurred. Retrying request.")
-                
-            except openai.error.Timeout as err:
+                                
+            except openai.APITimeoutError as err:
                 # Handle request timeouts
                 num_seconds = 3
                 print(f"Request timed out. Waiting {num_seconds} seconds and retrying...")
                 retries += 1
                 time.sleep(num_seconds)
                 
-            except openai.error.ServiceUnavailableError as err:
+            except openai.InternalServerError as err:
                 # Handle service unavailability errors
                 num_seconds = 3
-                print(f"Server overloaded. Waiting {num_seconds} seconds and retrying request.")
+                print(f"There's a problem at OpenAI's servers. Waiting {num_seconds} seconds and retrying request.")
                 time.sleep(num_seconds)
+
+            except openai.APIError as err:
+                # Handle generic API errors
+                print("An error occurred. Retrying request.")
+
 
         return None
