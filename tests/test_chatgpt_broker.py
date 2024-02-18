@@ -15,7 +15,7 @@ class TestChatGPTBroker(unittest.TestCase):
         self.api_key = "test_api_key"
         self.broker = ChatGPTBroker(self.api_key)
 
-    @patch('openai.ChatCompletion.create')
+    @patch('openai.resources.chat.Completions.create')
     def test_get_chatgpt_response(self, mock_create):
         mock_create.return_value = "Test return"
 

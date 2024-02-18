@@ -62,7 +62,7 @@ class GPTPipeline:
         # we need to find a way to store one text at a time in memory because we don't wanna use up all our memory
         # if we limit pipeline throughput to one text at a time from text list, we can provide percentage of task complete
 
-        self.add_module("Valve Module", Valve_Module(pipeline=self, valve_config="Valve config"))
+        self.add_module("Valve Module", Valve_Module(pipeline=self, num_texts=num_texts))
 
         # this implies that we need a new kind of module that reads the texts referenced in files_df and places them in texts_df ONE AT A TIME 
         # (or n-at-a-time, defined by user)
@@ -75,7 +75,7 @@ class GPTPipeline:
     # def read_df(self, )
 
     # We need a maximum for texts to process
-    def process(self, input_data, max_texts):
+    def process(self, input_data):
         # Put max_texts (or all texts if total < max_texts) texts into primary df (add completed feature = 0)
         # Use multiple GPT by bridging with code module, or just use single GPT module
 

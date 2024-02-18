@@ -37,7 +37,7 @@ pipeline = GPTPipeline(api_key)
 # real token length is 16385
 pipeline.set_default_values({'delete': False, 'model': 'gpt-3.5-turbo-0125', 'context_window': 16385, 'temperature': 0.0, 'safety multiplier': .95, 'timeout': 15})
 generate_primary_csv(books_folder_path, "ebooks.csv", books_folder_path, **{})
-pipeline.import_texts(books_folder_path + "ebooks.csv", 100)
+pipeline.import_texts(books_folder_path + "ebooks.csv", 1)
 
 # add gpt single prompt module
 """
@@ -53,13 +53,13 @@ self.config = gpt_config
 gpt_config = {
     'input df': 'Text List',
     'output df': 'GPT Output',
-    'prompt': 'Just respond with \'yes\' to this request please! Nothing else :)',
+    'prompt': 'Just respond with \'test successful\' to this request please! Nothing else :)',
     'input text column': 'Full Text'
 }
 pipeline.add_gpt_singleprompt_module("gpt module", gpt_config)
 pipeline.add_df('GPT Output', replace_path_if_windows("/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/gpt_output", "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/", "E:\\NIMBioS\\GPT Parser\\tests\corpus\\books\\"))
 
-pipeline.process("Placeholder Data", 1)
+pipeline.process("Placeholder Data")
 
 # pipeline.print_modules()
 # pipeline.print_dfs()

@@ -25,11 +25,12 @@ Number of unprocessed files currently in output_df
 """
 
 class Valve_Module(Module):
-    def __init__(self, pipeline, valve_config):
-        self.valve_config = valve_config
-
-        self.max_files_total = 1000
-        self.max_files_at_once = 1
+    def __init__(self, pipeline, num_texts, max_at_once=0):
+        self.max_files_total = num_texts
+        if max_at_once >= 1:
+            self.max_files_at_once = max_at_once
+        else:
+            self.max_files_at_once = self.max_files_total
         self.current_files = 0
         self.total_ran_files = 0
 

@@ -1,12 +1,16 @@
 # gpt_parser/chatgpt_broker.py
-
 import openai
+from openai import OpenAI
 import tiktoken
 import time
 
 class ChatGPTBroker:
-    def __init__(self, api_key):
+    def __init__(self, api_key, organization=""):
         self.api_key = api_key
+        if organization != "":
+            self.client = OpenAI(api_key=api_key, organization=organization)
+        else:
+            self.client = OpenAI(api_key=api_key)
 
     def get_tokenized_length(self, system_message, user_message, model, examples=[]):
         """
@@ -60,6 +64,8 @@ class ChatGPTBroker:
         - chunks (list of strings): A list of chunks, where each chunk is a segment of text.
         """
 
+        print(f"This is the max context window: {max_context_window}")
+
         if safety_multiplier > 1.0:
             safety_multiplier = 1.0
         elif safety_multiplier <= 0:
@@ -74,29 +80,28 @@ class ChatGPTBroker:
             return [user_message]
         
         base_multiplier = 4
-        max_user_message_tokens = max_context_window - static_token_length
+        max_chunk_tokens = int((max_context_window - static_token_length) * safety_multiplier)
         chunks = []  # Will hold the resulting chunks of text
 
         # # need to finish and debug this logic later
         i = 0  # Start index for slicing the text
         while i < len(user_message):
-            # print(i)
-
             # Calculate the length of a user message chunk
             multiplier = base_multiplier
-            max_user_chunk_length = int(max_user_message_tokens * multiplier)
+            new_index = int(max_chunk_tokens * multiplier)
 
-            user_chunk = user_message[i:i+max_user_chunk_length]
-            user_chunk_length = self.get_tokenized_length('', user_chunk, model, [])
+            user_chunk = user_message[i:i+new_index]
+            user_chunk_tokens = self.get_tokenized_length('', user_chunk, model, [])
             
             # If the token length exceeds the max allowed, reduce the message length and recheck
-            while user_chunk_length > max_user_chunk_length:
+            while user_chunk_tokens > max_chunk_tokens:
                 multiplier *= 0.95
-                max_user_chunk_length = int(max_user_message_tokens * multiplier)
-                user_chunk = user_message[i:i+max_user_chunk_length]
-                user_chunk_length = self.get_tokenized_length('', user_chunk, 'gpt-3.5-turbo', [])
+                new_index = int(max_chunk_tokens * multiplier)
+                user_chunk = user_message[i:i+new_index]
+                user_chunk_tokens = self.get_tokenized_length('', user_chunk, 'gpt-3.5-turbo', [])
             
             # Save the chunk and move to the next segment of text
+            print(user_chunk_tokens)
             chunks.append(user_chunk)
             i += len(user_chunk)
         
@@ -120,6 +125,8 @@ class ChatGPTBroker:
         - str: The generated response from the GPT model.
         """
 
+
+
         tokenized_length = self.get_tokenized_length(system_message, user_message, model, examples)
         if tokenized_length > model_context_window:
             return ['Prompt too long...']
@@ -139,16 +146,13 @@ class ChatGPTBroker:
         while not got_response and retries < max_retries:
             try:
                 # Attempt to get a response from the GPT model
-                response = openai.ChatCompletion.create(
-                    model=model,
-                    messages=new_messages,
-                    temperature=temp,
-                    request_timeout=timeout
-                )
+                response = self.client.chat.completions.create(model=model,
+                messages=new_messages,
+                temperature=temp,
+                timeout=timeout)
                 
                 # Extract the generated text from the API response
-                # generated_text = response['choices'][0]['message']['content']
-                generated_text = response
+                generated_text = response.choices[0].message.content
                 got_response = True
                 return generated_text
                 
