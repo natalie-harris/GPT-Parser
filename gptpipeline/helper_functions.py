@@ -4,7 +4,6 @@ def truncate(string, max_length):
     else:
         return string
     
-
 def get_incomplete_entries(df, complete_feature):
     """
     Filters the input DataFrame to return rows where the value in the specified column is not 1.
@@ -20,3 +19,9 @@ def get_incomplete_entries(df, complete_feature):
     incomplete_df = df[df[complete_feature] != 1]
     
     return incomplete_df
+
+def all_entries_are_true(dictionary):
+    for entry in dictionary:
+        if dictionary[entry] is False:
+            return False
+    return True

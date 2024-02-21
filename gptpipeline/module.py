@@ -128,6 +128,11 @@ gpt_config: dictionary: {
 class GPTSinglePrompt_Module(GPT_Module):
 
     # USE .get() WHEN WE CAN USE DEFAULT VALUES INSTEAD (NOT FOR INPUT/OUTPUT DFS)
+    # maybe we should include some sort of move_across operation that moves input_df['selected entry'] to output_df['selected entry']
+    # OR we automatically move all across unless there isn't a match or we specify
+    # ^ Let's do this for now
+    # OR we just add the response to the original df? This wouldn't be bad
+
     def __init__(self, pipeline, gpt_config):
         self.config = gpt_config
         self.pipeline = pipeline
@@ -140,6 +145,7 @@ class GPTSinglePrompt_Module(GPT_Module):
         self.input_text_column = self.config.get('input text column', 'Text')
         self.input_completed_column = self.config.get('input completed column', 'Completed')
         self.output_text_column = self.config.get('output text column', 'Text')
+        self.output_response_column = self.config.get('output response column', 'Response')
         self.output_completed_column = self.config.get('output completed column', 'Completed')
 
         # important gpt request info
@@ -152,6 +158,31 @@ class GPTSinglePrompt_Module(GPT_Module):
         self.temperature = self.config.get('temperature', 'default')
         self.safety_multiplier = self.config.get('safety multiplier', 'default')
         self.timeout = self.config.get('timeout', 'default')
+
+        # set up output df:
+        if self.input_df_name not in pipeline.dfs:
+            print("Please instantiate all dfs before instantiating input df")
+            exit()
+
+    def setup_df(self, pipeline):
+        features = list(pipeline.dfs[self.input_df_name][0].columns)
+        if self.input_text_column not in features or self.input_completed_column not in features: # not enough features to setup df with singleprompt module
+            # raise ValueError("Input dataframes for Single Prompt GPT modules requires at least 'prompt' and 'completed' features")
+            return False
+
+        # move over all features except completed, then add new completed and response column
+        # NOTE: WE GOTTA MAKE RESPONSE FEATURE A CUSTOM NAME
+        features.remove(self.input_text_column)
+        features.remove(self.input_completed_column)
+
+        for feature in features:
+            pipeline.dfs[self.output_df_name][0][feature] = []
+
+        pipeline.dfs[self.output_df_name][0][self.output_text_column] = []
+        pipeline.dfs[self.output_df_name][0][self.output_response_column] = []
+        pipeline.dfs[self.output_df_name][0][self.output_completed_column] = []
+
+        return True
 
     def process(self, input_data):
         working = False
@@ -177,8 +208,16 @@ class GPTSinglePrompt_Module(GPT_Module):
 
             responses = self.pipeline.process_text(self.prompt, text, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier)
 
-            for response in responses:
-                new_entry = [response, 0]
+            # we don't need to include system message or examples for singleprompt module since they are static
+            for system_message, chunk, examples, response in responses:
+                new_entry = entry.drop(columns=[self.input_text_column, self.input_completed_column])
+                print("\n\n\n\n\n")
+                print(type(new_entry))
+                print(new_entry)
+                print("\n\n\n\n\n")
+                new_entry = new_entry[self.output_text_column] = [chunk]
+                new_entry = new_entry[self.output_response_column] = [response]
+                new_entry = new_entry[self.output_completed_column] = [0]
                 output_df.loc[len(output_df)] = new_entry
 
             if len(responses) != 0:

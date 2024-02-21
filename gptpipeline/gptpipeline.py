@@ -1,6 +1,6 @@
 from .module import Module, Valve_Module, GPTSinglePrompt_Module, GPTMultiPrompt_Module, Code_Module
 from .chatgpt_broker import ChatGPTBroker
-from .helper_functions import truncate
+from .helper_functions import truncate, all_entries_are_true
 from pathlib import Path
 import pandas as pd
 
@@ -44,7 +44,7 @@ class GPTPipeline:
     def add_gpt_multiprompt_module(self, name, config):
         gpt_module = GPTMultiPrompt_Module(pipeline=self, gpt_config=config)
 
-    def add_df(self, name, dest_path, features=['Text', 'Completed']):
+    def add_df(self, name, dest_path, features=[]):
         df = pd.DataFrame(columns=features)
         self.dfs[name] = (df, dest_path)
 
@@ -78,6 +78,23 @@ class GPTPipeline:
     def process(self, input_data):
         # Put max_texts (or all texts if total < max_texts) texts into primary df (add completed feature = 0)
         # Use multiple GPT by bridging with code module, or just use single GPT module
+
+        # connect all modules to their respective dfs
+        # to be efficient, this requires a network to determine which modules to setup_df first, so for now we will just loop until all output dfs are finished setting up
+        finished_setup = {}
+        for module in self.modules:
+            if not isinstance(self.modules[module], Valve_Module):
+                finished_setup[module] = False
+
+        while not all_entries_are_true(finished_setup):
+            made_progress = False
+            for module in self.modules:
+                if not isinstance(self.modules[module], Valve_Module) and finished_setup[module] is not True:
+                    result = self.modules[module].setup_df(self)
+                    finished_setup[module] = result
+                    made_progress = result
+            if not made_progress:
+                raise RuntimeError("Some dfs cannot be setup")
 
         # Set all modules to sequentially process until all of them no longer have any uncompleted processing tasks
         working = True
@@ -130,7 +147,8 @@ class GPTPipeline:
 
         responses = []
         for chunk in text_chunks:
-            responses.append(self.gpt_broker.get_chatgpt_response(system_message, chunk, model, model_context_window, temp, examples, timeout))
+            response = self.gpt_broker.get_chatgpt_response(system_message, chunk, model, model_context_window, temp, examples, timeout)
+            responses.append((system_message, chunk, examples, response))
 
         return responses
     
