@@ -26,7 +26,7 @@ pipeline = GPTPipeline(api_key)
 # real token length is 16385
 pipeline.set_default_values({'delete': False, 'model': 'gpt-3.5-turbo-0125', 'context_window': 16385, 'temperature': 0.0, 'safety multiplier': .95, 'timeout': 15})
 generate_primary_csv(books_folder_path, "ebooks.csv", books_folder_path, **{})
-pipeline.import_texts(books_folder_path + "ebooks.csv", 5)
+pipeline.import_texts(books_folder_path + "ebooks.csv", 1)
 
 # add gpt single prompt module
 
@@ -46,4 +46,4 @@ pipeline.process("Placeholder Data")
 # pipeline.print_modules()
 # pipeline.print_dfs()
 # pipeline.print_text_df()
-# pipeline.print_df('GPT Output')
+pipeline.print_df('GPT Output')

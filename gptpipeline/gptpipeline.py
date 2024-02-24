@@ -29,6 +29,7 @@ class GPTPipeline:
             else:
                 print(f"'{key}' is not a valid variable name.")
 
+    # return a df
     def get_df(self, name):
         return self.dfs[name][0]
 

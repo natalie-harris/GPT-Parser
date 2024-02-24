@@ -165,7 +165,19 @@ class GPTSinglePrompt_Module(GPT_Module):
             exit()
 
     def setup_df(self, pipeline):
-        features = list(pipeline.dfs[self.input_df_name][0].columns)
+
+        features_dtypes = pipeline.dfs[self.input_df_name][0].dtypes
+        features_with_dtypes = list(features_dtypes.items())
+
+
+        features = []
+        dtypes = []
+
+        # Iterate over each item in features_dtypes to separate names and types
+        for feature, dtype in features_with_dtypes:
+            features.append(feature)
+            dtypes.append(dtype)
+
         if self.input_text_column not in features or self.input_completed_column not in features: # not enough features to setup df with singleprompt module
             # raise ValueError("Input dataframes for Single Prompt GPT modules requires at least 'prompt' and 'completed' features")
             return False
@@ -175,12 +187,12 @@ class GPTSinglePrompt_Module(GPT_Module):
         features.remove(self.input_text_column)
         features.remove(self.input_completed_column)
 
-        for feature in features:
-            pipeline.dfs[self.output_df_name][0][feature] = []
+        for feature, dtype in features_with_dtypes:
+            pipeline.dfs[self.output_df_name][0][feature] = pd.Series(dtype=object)
 
-        pipeline.dfs[self.output_df_name][0][self.output_text_column] = []
-        pipeline.dfs[self.output_df_name][0][self.output_response_column] = []
-        pipeline.dfs[self.output_df_name][0][self.output_completed_column] = []
+        pipeline.dfs[self.output_df_name][0][self.output_text_column] = pd.Series(dtype="string")
+        pipeline.dfs[self.output_df_name][0][self.output_response_column] = pd.Series(dtype="string")
+        pipeline.dfs[self.output_df_name][0][self.output_completed_column] = pd.Series(dtype="int")
 
         return True
 
@@ -210,15 +222,23 @@ class GPTSinglePrompt_Module(GPT_Module):
 
             # we don't need to include system message or examples for singleprompt module since they are static
             for system_message, chunk, examples, response in responses:
-                new_entry = entry.drop(columns=[self.input_text_column, self.input_completed_column])
-                print("\n\n\n\n\n")
-                print(type(new_entry))
-                print(new_entry)
-                print("\n\n\n\n\n")
-                new_entry = new_entry[self.output_text_column] = [chunk]
-                new_entry = new_entry[self.output_response_column] = [response]
-                new_entry = new_entry[self.output_completed_column] = [0]
-                output_df.loc[len(output_df)] = new_entry
+                # Assuming 'entry' is a Series, convert it to a one-row DataFrame
+                new_entry_df = entry.to_frame().transpose().copy()
+                
+                # Drop the unnecessary columns
+                new_entry_df = new_entry_df.drop(columns=[self.input_text_column, self.input_completed_column])
+                
+                # Add the new data
+                new_entry_df[self.output_text_column] = chunk
+                new_entry_df[self.output_response_column] = response
+                new_entry_df[self.output_completed_column] = 0
+                
+                # Identify the next index for output_df
+                next_index = len(output_df)
+                
+                # Iterate over columns in new_entry_df to add them to output_df
+                for col in new_entry_df.columns:
+                    output_df.at[next_index, col] = new_entry_df[col].values[0]
 
             if len(responses) != 0:
                 input_df.at[entry_index, self.input_completed_column] = 1
