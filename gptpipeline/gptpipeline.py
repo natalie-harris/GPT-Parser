@@ -3,6 +3,8 @@ from .chatgpt_broker import ChatGPTBroker
 from .helper_functions import truncate, all_entries_are_true
 from pathlib import Path
 import pandas as pd
+from tqdm import tqdm
+import time
 
 class GPTPipeline:
     def __init__(self, api_key):
@@ -146,10 +148,15 @@ class GPTPipeline:
 
         text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, safety_multiplier)
 
+        # setup progress bar
+        pbar = tqdm(total=len(text_chunks))  # 100% is the completion
+
         responses = []
         for chunk in text_chunks:
             response = self.gpt_broker.get_chatgpt_response(system_message, chunk, model, model_context_window, temp, examples, timeout)
             responses.append((system_message, chunk, examples, response))
+            pbar.update(1)
+
 
         return responses
     

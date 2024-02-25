@@ -168,8 +168,7 @@ class GPTSinglePrompt_Module(GPT_Module):
 
         features_dtypes = pipeline.dfs[self.input_df_name][0].dtypes
         features_with_dtypes = list(features_dtypes.items())
-
-
+        
         features = []
         dtypes = []
 

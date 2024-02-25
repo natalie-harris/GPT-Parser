@@ -64,7 +64,7 @@ class ChatGPTBroker:
         - chunks (list of strings): A list of chunks, where each chunk is a segment of text.
         """
 
-        print(f"This is the max context window: {max_context_window}")
+        # print(f"This is the max context window: {max_context_window}")
 
         if safety_multiplier > 1.0:
             safety_multiplier = 1.0
@@ -101,7 +101,6 @@ class ChatGPTBroker:
                 user_chunk_tokens = self.get_tokenized_length('', user_chunk, 'gpt-3.5-turbo', [])
             
             # Save the chunk and move to the next segment of text
-            print(user_chunk_tokens)
             chunks.append(user_chunk)
             i += len(user_chunk)
         
