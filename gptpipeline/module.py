@@ -51,7 +51,7 @@ class Valve_Module(Module):
         # print(self.input_df)
         # print(self.output_df)
 
-    def process(self, input_data):
+    def process(self):
 
         working = False
 
@@ -110,9 +110,6 @@ class GPT_Module(Module):
     def process(self, input_data):
         pass
 
-    def make_gpt_request(self, openai_request):
-        pass
-
 """
 gpt_config: dictionary: {
         input_df (str)
@@ -168,25 +165,21 @@ class GPTSinglePrompt_Module(GPT_Module):
 
         features_dtypes = pipeline.dfs[self.input_df_name][0].dtypes
         features_with_dtypes = list(features_dtypes.items())
-        
+
+        # print(f"FEATURES: {features_with_dtypes}")
+        # print(f"{self.input_text_column}")
+        # print(f"{self.input_completed_column}")
+
         features = []
         dtypes = []
 
         # Iterate over each item in features_dtypes to separate names and types
         for feature, dtype in features_with_dtypes:
-            features.append(feature)
-            dtypes.append(dtype)
+            if feature != self.input_completed_column and feature != self.input_text_column:
+                features.append(feature)
+                dtypes.append(dtype)
 
-        if self.input_text_column not in features or self.input_completed_column not in features: # not enough features to setup df with singleprompt module
-            # raise ValueError("Input dataframes for Single Prompt GPT modules requires at least 'prompt' and 'completed' features")
-            return False
-
-        # move over all features except completed, then add new completed and response column
-        # NOTE: WE GOTTA MAKE RESPONSE FEATURE A CUSTOM NAME
-        features.remove(self.input_text_column)
-        features.remove(self.input_completed_column)
-
-        for feature, dtype in features_with_dtypes:
+        for feature, dtype in zip(features, dtypes):
             pipeline.dfs[self.output_df_name][0][feature] = pd.Series(dtype=object)
 
         pipeline.dfs[self.output_df_name][0][self.output_text_column] = pd.Series(dtype="string")
@@ -195,7 +188,7 @@ class GPTSinglePrompt_Module(GPT_Module):
 
         return True
 
-    def process(self, input_data):
+    def process(self):
         working = False
 
         input_df = self.pipeline.get_df(self.input_df_name)
@@ -249,7 +242,7 @@ class GPTMultiPrompt_Module(GPT_Module):
     def __init__(self, gpt_config):
         self.gpt_config = gpt_config
 
-    def process(self, input_data):
+    def process(self):
         # GPT specific processing logic
         return "Multi module processed: " + input_data
     
@@ -258,10 +251,11 @@ Code Modules can take in zero or more dataframes as input and write to multiple 
 """
 class Code_Module(Module):
     def __init__(self, pipeline, code_config, process_function):
+        self.pipeline = pipeline
         self.code_config = code_config
         self.process_function = process_function
 
-    def process(self, input_data):
+    def process(self):
         # Call the provided function with input_data
-        processed_data = self.process_function(input_data)
-        return processed_data
+        # process_function needs to return False if it didn't take input from a df, and True if it did
+        return self.process_function(self.pipeline)

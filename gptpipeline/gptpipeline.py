@@ -47,9 +47,19 @@ class GPTPipeline:
     def add_gpt_multiprompt_module(self, name, config):
         gpt_module = GPTMultiPrompt_Module(pipeline=self, gpt_config=config)
 
-    def add_df(self, name, dest_path, features=[]):
-        df = pd.DataFrame(columns=features)
-        self.dfs[name] = (df, dest_path)
+    def add_code_module(self, name, process_function):
+        code_module = Code_Module(pipeline=self, code_config="config", process_function=process_function)
+        self.modules[name] = code_module
+
+    def add_df(self, name, dest_path=None, features={}):
+        try:
+            df = pd.DataFrame(columns=[*features])
+            if len(features) != 0:
+                df = df.astype(dtype=features)
+            self.dfs[name] = (df, dest_path)
+        except TypeError:
+            print("'Features' format: {'feature_name': dtype, ...}")
+            exit()
 
     """
     The text csv contains features: File Name, Completed
@@ -78,7 +88,7 @@ class GPTPipeline:
     # def read_df(self, )
 
     # We need a maximum for texts to process
-    def process(self, input_data):
+    def process(self):
         # Put max_texts (or all texts if total < max_texts) texts into primary df (add completed feature = 0)
         # Use multiple GPT by bridging with code module, or just use single GPT module
 
@@ -88,14 +98,23 @@ class GPTPipeline:
         for module in self.modules:
             if not isinstance(self.modules[module], Valve_Module):
                 finished_setup[module] = False
+            else:
+                finished_setup[module] = True
 
         while not all_entries_are_true(finished_setup):
             made_progress = False
             for module in self.modules:
-                if not isinstance(self.modules[module], Valve_Module) and finished_setup[module] is not True:
+                if isinstance(self.modules[module], Valve_Module) and finished_setup[module] is not True:
+                    finished_setup[module] = True
+                    made_progress = True
+                elif isinstance(self.modules[module], GPTSinglePrompt_Module) and finished_setup[module] is not True:
                     result = self.modules[module].setup_df(self)
                     finished_setup[module] = result
                     made_progress = result
+                elif isinstance(self.modules[module], Code_Module) and finished_setup[module] is not True:
+                    finished_setup[module] = True
+                    made_progress = True
+
             if not made_progress:
                 raise RuntimeError("Some dfs cannot be setup")
 
@@ -104,9 +123,10 @@ class GPTPipeline:
         while working is True:
             working = False
             for module in self.modules:
-                working = self.modules[module].process(input_data)
-        print("Finished!")
-    
+                working = self.modules[module].process()
+
+        # save each df if dest_path is specified for it
+
     def print_modules(self):
         print(self.modules)
  
