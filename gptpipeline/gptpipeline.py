@@ -40,8 +40,8 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_gpt_singleprompt_module(self, name, config):
-        gpt_module = GPTSinglePrompt_Module(pipeline=self, gpt_config=config)
+    def add_gpt_singleprompt_module(self, name, input_df_name, output_df_name, prompt, examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+        gpt_module = GPTSinglePrompt_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
         self.modules[name] = gpt_module
 
     def add_gpt_multiprompt_module(self, name, config):
@@ -85,9 +85,6 @@ class GPTPipeline:
         df = pd.read_csv(dest_path + name)
         self.dfs[name] = (df, dest_path)
 
-    # def read_df(self, )
-
-    # We need a maximum for texts to process
     def process(self):
         # Put max_texts (or all texts if total < max_texts) texts into primary df (add completed feature = 0)
         # Use multiple GPT by bridging with code module, or just use single GPT module
@@ -149,15 +146,15 @@ class GPTPipeline:
     def process_text(self, system_message, user_message, model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default'):
 
         # replace defaults
-        if model == 'default':
+        if model is None:
             model = self.default_vals['model']
-        if model_context_window == 'default':
+        if model_context_window is None:
             model_context_window = self.default_vals['context_window']
-        if not isinstance(temp, float) or temp > 1.0 or temp < 0.0:
+        if temp is None or not isinstance(temp, float) or temp > 1.0 or temp < 0.0:
             temp = self.default_vals['temperature']
-        if not isinstance(timeout, int) or timeout < 0:
+        if timeout is None or not isinstance(timeout, int) or timeout < 0:
             timeout = self.default_vals['timeout']
-        if not isinstance(safety_multiplier, float) or safety_multiplier < 0.0:
+        if safety_multiplier is None or not isinstance(safety_multiplier, float) or safety_multiplier < 0.0:
             safety_multiplier = self.default_vals['safety multiplier']    
 
         # make sure breaking up into chunks is even possible given system message and examples token length

@@ -15,7 +15,6 @@ Notes:
 from gptpipeline import *
 import pandas as pd
 import string
-import os
 
 def categorize_books(pipeline):
     working = False
@@ -41,7 +40,6 @@ def categorize_books(pipeline):
             response = response.translate(str.maketrans('', '', string.punctuation))
             if len(response) > 4:
                 continue
-            print(response)
             if response != 'no':
                 appropriate = False
         
@@ -66,14 +64,8 @@ pipeline.set_default_values({'delete': False, 'model': 'gpt-3.5-turbo-0125', 'co
 generate_primary_csv(books_folder_path, "ebooks.csv", books_folder_path, **{})
 pipeline.import_texts(books_folder_path + "ebooks.csv", 25)
 
-# add gpt single prompt module
-gpt_config = {
-    'input df': 'Text List',
-    'output df': 'GPT Output',
-    'prompt': "You are a 'Yes' or 'No' machine. It is of the utmost importance that your response is ONLY \'Yes\' or \'No\'. Please response with 'Yes' if this text has serious depictions of violence in it, or 'No' if it doesn't. I know you are a model, do not act like a human by adding anything else. 'Yes' or 'No' only.",
-    'input text column': 'Full Text'
-}
-pipeline.add_gpt_singleprompt_module("gpt module", gpt_config)
+# add pipeline after valve module
+pipeline.add_gpt_singleprompt_module("gpt module", input_df_name='Text List', output_df_name='GPT Output', prompt="You are a 'Yes' or 'No' machine. It is of the utmost importance that your response is ONLY \'Yes\' or \'No\'. Please response with 'Yes' if this text has serious depictions of violence in it, or 'No' if it doesn't. I know you are a model, do not act like a human by adding anything else. 'Yes' or 'No' only.",input_text_column='Full Text')
 pipeline.add_df('GPT Output', "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/gpt_output")
 pipeline.add_code_module('code module', categorize_books)
 pipeline.add_df('Categorized Books', dest_path="/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/categorized_books", features={'File Name': object, 'Appropriate': bool, 'Completed': bool})

@@ -4,8 +4,8 @@ import time
 from .helper_functions import get_incomplete_entries, truncate
 
 class Module(ABC):
-    def __init__(self, pipeline, module_config):
-        self.module_config = module_config
+    def __init__(self, pipeline):
+        self.pipeline = pipeline
 
     @abstractmethod
     def process(self, input_data):
@@ -26,6 +26,8 @@ Number of unprocessed files currently in output_df
 
 class Valve_Module(Module):
     def __init__(self, pipeline, num_texts, max_at_once=0):
+        super().__init__(pipeline)
+
         self.max_files_total = num_texts
         if max_at_once >= 1:
             self.max_files_at_once = max_at_once
@@ -103,8 +105,19 @@ NOTE: allow for custom Complete feature name in case multiple modules are access
 """
 
 class GPT_Module(Module):
-    def __init__(self, pipeline, gpt_config):
-        self.gpt_config = gpt_config
+    def __init__(self, pipeline, input_df_name, output_df_name, model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None):
+        super().__init__(pipeline)
+
+        #df config
+        self.input_df_name = input_df_name
+        self.output_df_name = output_df_name
+
+        self.model = model
+        self.context_window = context_window
+        self.temperature = temperature
+        self.safety_multiplier = safety_multiplier
+        self.delete = delete
+        self.timeout = timeout
 
     @abstractmethod
     def process(self, input_data):
@@ -130,32 +143,20 @@ class GPTSinglePrompt_Module(GPT_Module):
     # ^ Let's do this for now
     # OR we just add the response to the original df? This wouldn't be bad
 
-    def __init__(self, pipeline, gpt_config):
-        self.config = gpt_config
-        self.pipeline = pipeline
+    def __init__(self, pipeline, input_df_name, output_df_name, prompt, examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
         
-        # df config
-        self.input_df_name = self.config['input df']
-        self.output_df_name = self.config['output df']
-        self.delete = self.config.get('delete', 'default')
-
-        self.input_text_column = self.config.get('input text column', 'Text')
-        self.input_completed_column = self.config.get('input completed column', 'Completed')
-        self.output_text_column = self.config.get('output text column', 'Text')
-        self.output_response_column = self.config.get('output response column', 'Response')
-        self.output_completed_column = self.config.get('output completed column', 'Completed')
+        super().__init__(pipeline=pipeline,input_df_name=input_df_name,output_df_name=output_df_name, model=model, context_window=context_window,temperature=temperature,safety_multiplier=safety_multiplier,delete=False,timeout=timeout)
+        
+        self.input_text_column = input_text_column
+        self.input_completed_column = input_completed_column
+        self.output_text_column = output_text_column
+        self.output_response_column = output_response_column
+        self.output_completed_column = output_completed_column
 
         # important gpt request info
-        self.prompt = self.config['prompt']
-        self.examples = self.config.get('examples', [])
+        self.prompt = prompt
+        self.examples = examples
         
-        # remember to replace default vals
-        self.model = self.config.get('model', 'default')
-        self.context_window = self.config.get('context window', 'default')
-        self.temperature = self.config.get('temperature', 'default')
-        self.safety_multiplier = self.config.get('safety multiplier', 'default')
-        self.timeout = self.config.get('timeout', 'default')
-
         # set up output df:
         if self.input_df_name not in pipeline.dfs:
             print("Please instantiate all dfs before instantiating input df")
@@ -244,7 +245,7 @@ class GPTMultiPrompt_Module(GPT_Module):
 
     def process(self):
         # GPT specific processing logic
-        return "Multi module processed: " + input_data
+        return "Multi module processed"
     
 """
 Code Modules can take in zero or more dataframes as input and write to multiple dataframes as output. They can be in any format
