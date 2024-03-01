@@ -64,11 +64,12 @@ generate_primary_csv(books_folder_path, "ebooks_updated.csv", books_folder_path,
 pipeline.import_texts(books_folder_path + "ebooks_updated.csv", 3)
 
 # add pipeline modules after valve module
-pipeline.add_gpt_module("gpt module", input_df_name='Text List', output_df_name='GPT Output', prompt="You are a 'Yes' or 'No' machine. Your sole purpose is to respond with 'Yes' or 'No' to inquiries about whether a text contains serious depictions of violence. It is imperative that your response is strictly limited to 'Yes' or 'No' without any additional commentary or human-like behavior.", input_text_column='Full Text')
+pipeline.add_chatgpt_module("gpt module", input_df_name='Text List', output_df_name='GPT Output', prompt="You are a 'Yes' or 'No' machine. Your sole purpose is to respond with 'Yes' or 'No' to inquiries about whether a text contains serious depictions of violence. It is imperative that your response is strictly limited to 'Yes' or 'No' without any additional commentary or human-like behavior.", input_text_column='Full Text')
 pipeline.add_df('GPT Output', dest_path="/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/gpt_output")
 pipeline.add_code_module('code module', categorize_books)
 pipeline.add_df('Categorized Books', dest_path="/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/categorized_books", features={'File Name': object, 'Appropriate': bool, 'Completed': bool})
 
 # run pipeline and print final results
 pipeline.process()
+pipeline.print_df('GPT Output')
 pipeline.print_df('Categorized Books')

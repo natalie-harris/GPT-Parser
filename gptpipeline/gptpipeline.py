@@ -1,4 +1,4 @@
-from .module import Module, Valve_Module, GPT_Module, Code_Module
+from .module import Module, Valve_Module, ChatGPT_Module, Code_Module
 from .chatgpt_broker import ChatGPTBroker
 from .helper_functions import truncate, all_entries_are_true
 from pathlib import Path
@@ -30,17 +30,13 @@ class GPTPipeline:
             else:
                 print(f"'{key}' is not a valid variable name.")
 
-    # return a df
-    def get_df(self, name):
-        return self.dfs[name][0]
-
     def add_module(self, name, module):
         if not isinstance(module, Module):
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_gpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
-        gpt_module = GPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
+    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
         self.modules[name] = gpt_module
 
     def add_gpt_multiprompt_module(self, name, config):
@@ -49,6 +45,12 @@ class GPTPipeline:
     def add_code_module(self, name, process_function):
         code_module = Code_Module(pipeline=self, code_config="config", process_function=process_function)
         self.modules[name] = code_module
+
+    def add_dfs(self, names, dest_path=None, features={}):
+        for name in names:
+            if dest_path is not None:
+                new_dest_path = dest_path + "_" + name
+            self.add_df(name, new_dest_path, features)
 
     def add_df(self, name, dest_path=None, features={}):
         try:
@@ -103,7 +105,7 @@ class GPTPipeline:
                 if isinstance(self.modules[module], Valve_Module) and finished_setup[module] is not True:
                     finished_setup[module] = True
                     made_progress = True
-                elif isinstance(self.modules[module], GPT_Module) and finished_setup[module] is not True:
+                elif isinstance(self.modules[module], ChatGPT_Module) and finished_setup[module] is not True:
                     result = self.modules[module].setup_df(self)
                     finished_setup[module] = result
                     made_progress = result
@@ -131,8 +133,18 @@ class GPTPipeline:
             print(f"\n{df}:\n {self.dfs[df][0]}")
             # print('')
 
-    def print_df(self, name):
-        print(self.dfs[name])
+    def print_df(self, name, include_path=False):
+        if include_path is False:
+            print(self.dfs[name][0])
+        else:
+            print(self.dfs[name])
+
+    # return a df
+    def get_df(self, name, include_path=False):
+        if include_path is False:
+            return self.dfs[name][0]
+        else:
+            return self.dfs[name]
 
     def print_files_df(self):
         print(self.dfs["Files List"])
@@ -142,7 +154,7 @@ class GPTPipeline:
         for i in range(len(text_df)):
             print(f"Path: {text_df.at[i, 'Source File']}   Full Text: {truncate(text_df.at[i, 'Full Text'], 49)}   Completed: {text_df.at[i, 'Completed']}")
 
-    def process_text(self, system_message, user_message, injections=[], model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default'):
+    def process_text(self, system_message, user_message, injections=[], model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default', max_chunks_per_text=None):
 
         # replace defaults
         if model is None:
@@ -174,6 +186,8 @@ class GPTPipeline:
             return ['GPT API call failed.']
 
         text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, safety_multiplier)
+        if max_chunks_per_text is not None:
+            text_chunks = text_chunks[0:max_chunks_per_text]
 
         # setup progress bar
         pbar = tqdm(total=len(text_chunks))  # 100% is the completion
