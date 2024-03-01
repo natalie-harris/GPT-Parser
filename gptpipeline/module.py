@@ -135,7 +135,7 @@ gpt_config: dictionary: {
         examples (dict) # not implemented yet
     }
 """
-class GPTSinglePrompt_Module(GPT_Module):
+class GPT_Module(GPT_Module):
 
     # USE .get() WHEN WE CAN USE DEFAULT VALUES INSTEAD (NOT FOR INPUT/OUTPUT DFS)
     # maybe we should include some sort of move_across operation that moves input_df['selected entry'] to output_df['selected entry']
@@ -143,7 +143,7 @@ class GPTSinglePrompt_Module(GPT_Module):
     # ^ Let's do this for now
     # OR we just add the response to the original df? This wouldn't be bad
 
-    def __init__(self, pipeline, input_df_name, output_df_name, prompt, examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+    def __init__(self, pipeline, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
         
         super().__init__(pipeline=pipeline,input_df_name=input_df_name,output_df_name=output_df_name, model=model, context_window=context_window,temperature=temperature,safety_multiplier=safety_multiplier,delete=False,timeout=timeout)
         
@@ -156,7 +156,8 @@ class GPTSinglePrompt_Module(GPT_Module):
         # important gpt request info
         self.prompt = prompt
         self.examples = examples
-        
+        self.injection_columns = injection_columns
+
         # set up output df:
         if self.input_df_name not in pipeline.dfs:
             print("Please instantiate all dfs before instantiating input df")
@@ -201,6 +202,10 @@ class GPTSinglePrompt_Module(GPT_Module):
             entry = input_df.iloc[entry_index]
             text = entry[self.input_text_column]
 
+            injections = []
+            for column in self.injection_columns:
+                injections.append(entry[column])
+
             print(truncate(text, 49))
 
             # Put a chatgpt broker call here
@@ -211,7 +216,7 @@ class GPTSinglePrompt_Module(GPT_Module):
 
             # ALSO CHECK IF SYSTEM MESSAGE + EXAMPLES >= CONTEXT LENGTH
 
-            responses = self.pipeline.process_text(self.prompt, text, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier)
+            responses = self.pipeline.process_text(self.prompt, text, injections, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier)
 
             # we don't need to include system message or examples for singleprompt module since they are static
             for system_message, chunk, examples, response in responses:
@@ -238,15 +243,7 @@ class GPTSinglePrompt_Module(GPT_Module):
                 working = True
 
         return working
-
-class GPTMultiPrompt_Module(GPT_Module):
-    def __init__(self, gpt_config):
-        self.gpt_config = gpt_config
-
-    def process(self):
-        # GPT specific processing logic
-        return "Multi module processed"
-    
+   
 """
 Code Modules can take in zero or more dataframes as input and write to multiple dataframes as output. They can be in any format
 """

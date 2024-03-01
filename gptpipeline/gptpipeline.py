@@ -1,10 +1,9 @@
-from .module import Module, Valve_Module, GPTSinglePrompt_Module, GPTMultiPrompt_Module, Code_Module
+from .module import Module, Valve_Module, GPT_Module, Code_Module
 from .chatgpt_broker import ChatGPTBroker
 from .helper_functions import truncate, all_entries_are_true
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
-import time
 
 class GPTPipeline:
     def __init__(self, api_key):
@@ -40,8 +39,8 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_gpt_singleprompt_module(self, name, input_df_name, output_df_name, prompt, examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
-        gpt_module = GPTSinglePrompt_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
+    def add_gpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+        gpt_module = GPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
         self.modules[name] = gpt_module
 
     def add_gpt_multiprompt_module(self, name, config):
@@ -104,7 +103,7 @@ class GPTPipeline:
                 if isinstance(self.modules[module], Valve_Module) and finished_setup[module] is not True:
                     finished_setup[module] = True
                     made_progress = True
-                elif isinstance(self.modules[module], GPTSinglePrompt_Module) and finished_setup[module] is not True:
+                elif isinstance(self.modules[module], GPT_Module) and finished_setup[module] is not True:
                     result = self.modules[module].setup_df(self)
                     finished_setup[module] = result
                     made_progress = result
@@ -143,7 +142,7 @@ class GPTPipeline:
         for i in range(len(text_df)):
             print(f"Path: {text_df.at[i, 'Source File']}   Full Text: {truncate(text_df.at[i, 'Full Text'], 49)}   Completed: {text_df.at[i, 'Completed']}")
 
-    def process_text(self, system_message, user_message, model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default'):
+    def process_text(self, system_message, user_message, injections=[], model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default'):
 
         # replace defaults
         if model is None:
@@ -156,6 +155,17 @@ class GPTPipeline:
             timeout = self.default_vals['timeout']
         if safety_multiplier is None or not isinstance(safety_multiplier, float) or safety_multiplier < 0.0:
             safety_multiplier = self.default_vals['safety multiplier']    
+
+        # inject our injections as a replacement for multiprompt module
+        # allows for doing {{}} for edge case when user wants {} in their prompt without injecting into it
+        nonplaceholders_count = system_message.count('{{}}')
+        placeholders_count = system_message.count('{}')
+        placeholders_count = placeholders_count - nonplaceholders_count
+
+        if len(injections) > 0 and len(injections) == placeholders_count:
+            system_message = system_message.format(*injections)
+        elif len(injections) != placeholders_count:
+            print("Inequivalent number of placeholders in system message and injections. Not injecting into system prompt to prevent errors. If you mean to have curly brace sets in your system prompt ({}), then escape them by wrapping them in another set of curly braces ({{}}).")
 
         # make sure breaking up into chunks is even possible given system message and examples token length
         static_token_length = self.gpt_broker.get_tokenized_length(system_message, "", model, examples)
