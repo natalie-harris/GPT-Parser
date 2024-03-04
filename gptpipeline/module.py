@@ -259,3 +259,45 @@ class Code_Module(Module):
         # Call the provided function with input_data
         # process_function needs to return False if it didn't take input from a df, and True if it did
         return self.process_function(self.pipeline)
+
+class Duplication_Module(Module):
+    def __init__(self, pipeline, input_df_name, output_df_names):
+        self.pipeline = pipeline
+        self.input_df_name = input_df_name
+        self.output_df_names = output_df_names
+
+        self.input_df = pipeline.get_df(self.input_df_name)
+        self.output_dfs = []
+        for output_df_name in self.output_df_names:
+            self.output_dfs.append(pipeline.get_df(output_df_name))
+
+    def setup_df(self, pipeline):
+        features_dtypes = self.input_df[0].dtypes
+        features_with_dtypes = list(features_dtypes.items())
+        print(features_with_dtypes)
+
+        # print(f"FEATURES: {features_with_dtypes}")
+        # print(f"{self.input_text_column}")
+        # print(f"{self.input_completed_column}")
+
+        features = []
+        dtypes = []
+
+         # Iterate over each item in features_dtypes to separate names and types
+        for feature, dtype in features_with_dtypes:
+            if feature != self.input_completed_column and feature != self.input_text_column:
+                features.append(feature)
+                dtypes.append(dtype)
+
+        for output_df in self.output_dfs:
+            for feature, dtype in zip(features, dtypes):
+                output_df[0][feature] = pd.Series(dtype=object)
+
+        pipeline.dfs[self.output_df_name][0][self.output_text_column] = pd.Series(dtype="string")
+        pipeline.dfs[self.output_df_name][0][self.output_response_column] = pd.Series(dtype="string")
+        pipeline.dfs[self.output_df_name][0][self.output_completed_column] = pd.Series(dtype="int")
+
+        return True
+    
+    def process(self):
+        return False
