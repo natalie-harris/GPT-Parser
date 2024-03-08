@@ -7,7 +7,7 @@ if os.name == 'nt':  # Windows
     base_path = "E:\\NIMBioS\\GPT Parser\\tests\\corpus\\books\\"
     csv_file_path = base_path + "ebooks.csv"
 else:  # macOS and others (assuming macOS for this example)
-    base_path = "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/"
+    base_path = "/Users/natalieharris/UTK/NIMBioS/GPTPipelines/tests/corpus/books/"
     csv_file_path = base_path + "ebooks.csv"
 
 # Function to update the file path

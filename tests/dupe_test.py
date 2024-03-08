@@ -16,8 +16,8 @@ from src import *
 import pandas as pd
 import string
 
-books_folder_path = "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/tests/corpus/books/"
-openai_key_path = "/Users/natalieharris/UTK/NIMBioS/GPTPipeline/openai_key.txt"
+books_folder_path = "/Users/natalieharris/UTK/NIMBioS/GPTPipelines/tests/corpus/books/"
+openai_key_path = "/Users/natalieharris/UTK/NIMBioS/GPTPipelines/openai_key.txt"
 
 with open(openai_key_path, "r") as fd:
     api_key = fd.read()
