@@ -12,7 +12,7 @@ Notes:
     Second df is called "Text List"
 """
 
-from gptpipeline import *
+from src import *
 import pandas as pd
 import string
 

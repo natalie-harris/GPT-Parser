@@ -1,9 +1,0 @@
-Cleanup gptpl_test.py
-    - This may involve consolidating functions, like putting import_texts() in process() (consider putting generate_primary_csv() in there too)
-
-Add a code module into gptpl_test, make it work!!!
-
-Change default value stuff to optional parameters, using None when not included
-
-
-After this, start work on recreating SBW Pipeline!!!!!!!!!

@@ -6,7 +6,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
 
 setup(
     name = 'gptpipeline',
-    version = '0.0.0',
+    version = '0.0.1',
     author = 'Natalie Harris',
     author_email = 'mzg857@vols.utk.edu',
     description = 'ChatGPT-enabled data processing pipelines',
