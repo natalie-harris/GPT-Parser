@@ -3,54 +3,60 @@ from src.chatgpt_broker import ChatGPTBroker
 from src.helper_functions import truncate, all_entries_are_true
 from pathlib import Path
 import pandas as pd
+import logging
 from tqdm import tqdm
+import warnings
 
 class GPTPipeline:
     """
-    A pipeline for processing tabular data using the ChatGPT API.
-
-    This class initializes a pipeline that can include various modules for data processing,
-    handling interactions with the ChatGPT API, and managing DataFrames for input and output data.
+    Manages a pipeline for processing data using the ChatGPT API, incorporating various modules
+    for specific tasks such as data handling, GPT interactions, and managing data frames.
 
     Parameters
     ----------
     api_key : str
-        The API key used for authenticating requests to GPT services.
+        The API key required for authenticating requests with the GPT API.
+    organization : str, optional
+        Organization ID for billing and usage tracking with the OpenAI platform (default is None).
+    verbose_chatgpt_api : bool, optional
+        If True, enables verbose logging for ChatGPT API interactions (default is False).
+    verbose_pipeline_output : bool, optional
+        If True, enables verbose logging for pipeline processing output (default is False).
 
     Attributes
     ----------
     modules : dict
-        A dictionary mapping module names to their instances. Modules are components that can be added to the pipeline to perform specific tasks, such as data processing or interaction with the GPT API.
+        Maps module names to their respective module instances {Name: module}.
     dfs : dict
-        A dictionary mapping DataFrame names to tuples containing the DataFrame itself and an optional destination path for saving the DataFrame. This attribute manages the DataFrames that are used or generated as part of the pipeline's operation.
+        Maps DataFrame names to tuples {Name: (DataFrame, destination path)}, managing input and output data.
     gpt_broker : ChatGPTBroker
-        An instance of ChatGPTBroker, which handles making requests to the ChatGPT API using the provided API key. It serves as the intermediary for all GPT-related operations within the pipeline.
+        Handles interactions with the ChatGPT API, utilizing the provided API key.
+    LOG : logging.Logger
+        Configured logger for the pipeline, capturing and formatting log messages.
     default_vals : dict
-        A dictionary containing default configuration parameters for the pipeline and its interactions with the GPT API. This includes settings for whether to delete data after processing, the GPT model to use, the context window size, the temperature for generating responses, a safety multiplier to adjust the maximum token length, and a default timeout for API requests.
-
-    Methods
-    -------
-    __init__(api_key):
-        Initializes the GPTPipeline with the specified API key and sets up the initial configuration, including an empty modules dictionary, an empty DataFrame dictionary, a ChatGPTBroker instance, and default configuration values.
+        Default configuration values for the pipeline, including settings for API interactions.
     """
 
-    def __init__(self, api_key):
+    def __init__(self, api_key, organization=None, verbose_chatgpt_api=False, verbose_pipeline_output=False):
         """
         Initializes the GPTPipeline with the provided API key.
 
         This constructor sets up the basic infrastructure required for the pipeline to function,
-        including the management of modules, DataFrames, and interactions with the GPT API.
+        including the management of modules, DataFrames, and interactions with the ChatGPT API.
 
         Parameters
         ----------
         api_key : str
             The API key required for authenticating requests to the GPT API.
-
         """
 
         self.modules = {} # {name: module}
         self.dfs = {} # {name: (df, dest_path)}
-        self.gpt_broker = ChatGPTBroker(api_key)
+        self.gpt_broker = ChatGPTBroker(api_key, organization=organization, verbose=verbose_chatgpt_api)
+
+        # Set up basic configuration for logging
+        self.LOG = logging.getLogger(__name__)
+        logging.basicConfig(level=logging.INFO)
 
         self.default_vals = {
             'delete': False,
@@ -60,6 +66,9 @@ class GPTPipeline:
             'safety multiplier': .95,
             'timeout': 15
         }
+
+        if not verbose_pipeline_output:
+            warnings.formatwarning = lambda message, category, filename, lineno, line=None: f'\033[91m{category.__name__}:\033[0m {message}\n'
 
     def get_default_values(self):
         """
@@ -152,7 +161,7 @@ class GPTPipeline:
         gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
         self.modules[name] = gpt_module
 
-    def add_code_module(self, name, process_function):
+    def add_code_module(self, name, process_function, input_df_names=[], output_df_names=[]):
         """
         Add a code module to the pipeline.
 
@@ -162,9 +171,13 @@ class GPTPipeline:
             The name of the code module.
         process_function : function
             The function to process data within this module.
+        input_df_names : list, optional
+            If list has df names (str type) in it, their respective dfs will be passed into `input_dfs` list of DataFrames if they are called in user's process_function().
+        output_df_names : list, optional
+            If list has df names (str type) in it, their respective dfs will be passed into `output_dfs` list of DataFrames if they are called in user's process_function().
         """
 
-        code_module = Code_Module(pipeline=self, code_config="config", process_function=process_function)
+        code_module = Code_Module(pipeline=self, process_function=process_function, input_df_names=input_df_names, output_df_names=output_df_names)
         self.modules[name] = code_module
 
     def add_duplication_module(self, name, input_df_name, output_df_names, input_completed_column='Completed', delete=False):
@@ -232,9 +245,6 @@ class GPTPipeline:
             print("'Features' format: {'feature_name': dtype, ...}")
             exit()
 
-    """
-    The text csv contains features: File Name, Completed
-    """
     def import_texts(self, path, num_texts):
         """
         Import texts from a CSV file and populate DataFrames for file and text lists.
@@ -296,14 +306,15 @@ class GPTPipeline:
                 elif isinstance(self.modules[module], ChatGPT_Module) and finished_setup[module] is not True:
                     result = self.modules[module].setup_df()
                     finished_setup[module] = result
-                    made_progress = result
+                    made_progress = result or made_progress
                 elif isinstance(self.modules[module], Duplication_Module) and finished_setup[module] is not True:
                     result = self.modules[module].setup_df()
                     finished_setup[module] = result
-                    made_progress = result
+                    made_progress = result or made_progress
                 elif isinstance(self.modules[module], Code_Module) and finished_setup[module] is not True:
-                    finished_setup[module] = True
-                    made_progress = True
+                    result = self.modules[module].setup_dfs()
+                    finished_setup[module] = result
+                    made_progress = result or made_progress
 
             if not made_progress:
                 raise RuntimeError("Some dfs cannot be setup")
@@ -324,7 +335,34 @@ class GPTPipeline:
 
         print(self.modules)
  
-    def print_dfs(self, names=[]):
+    def _get_printable_df(self, df_name):
+        """
+        Retrieves a DataFrame from the pipeline's data store and returns a version suitable for printing.
+        
+        This method fetches the DataFrame associated with the provided name and processes it to ensure
+        that its content is displayed correctly when printed. It replaces newline characters
+        in string entries with spaces to avoid disrupting the layout of the printed DataFrame.
+        
+        Parameters
+        ----------
+        df_name : str
+            The name of the DataFrame to retrieve and process for printing.
+        
+        Returns
+        -------
+        pandas.DataFrame
+            A copy of the specified DataFrame with newline characters in string entries replaced by spaces.
+        
+        Notes
+        -----
+        This method does not modify the original DataFrame stored in the pipeline's data store.
+        It operates on and returns a copy of the DataFrame, ensuring that the original data remains unchanged.
+        """
+
+        df = self.dfs[df_name][0]
+        return df.map(lambda x: x.replace('\n', ' ') if isinstance(x, str) else x)
+
+    def print_dfs(self, names=None):
         """
         Print the specified DataFrames. If no names are provided, print all DataFrames.
 
@@ -334,15 +372,16 @@ class GPTPipeline:
             The names of the DataFrames to print. If empty, all DataFrames are printed.
         """
         
-        if len(names) == 0:
-            for df in self.dfs:
-                print(f"\n{df}:\n {self.dfs[df][0]}")
-                # print('')
-            return
-        
-        for df in names:
-            print(f"\n{df}:\n {self.dfs[df][0]}")
+        if names is None:
+            for df_name in self.dfs:
+                formatted_df = self._get_printable_df(df_name)
+                print(f"\n{df_name}:\n{formatted_df}")
 
+                # print('')
+        else:
+            for df_name in names:
+                formatted_df = self._get_printable_df(df_name)
+                print(f"\n{df_name}:\n{formatted_df}")
 
     def print_df(self, name, include_path=False):
         """
@@ -356,10 +395,13 @@ class GPTPipeline:
             Whether to include the destination path in the output.
         """
 
+        formatted_df = self._get_printable_df(name)
+
         if include_path is False:
-            print(self.dfs[name][0])
+            print(formatted_df)
         else:
-            print(self.dfs[name])
+            print(formatted_df)
+            print(self.dfs[name][1])
 
     # return a df
     def get_df(self, name, include_path=False):
@@ -400,7 +442,63 @@ class GPTPipeline:
         for i in range(len(text_df)):
             print(f"Path: {text_df.at[i, 'Source File']}   Full Text: {truncate(text_df.at[i, 'Full Text'], 49)}   Completed: {text_df.at[i, 'Completed']}")
 
-    def process_text(self, system_message, user_message, injections=[], model='default', model_context_window='default', temp='default', examples=[], timeout='default', safety_multiplier='default', max_chunks_per_text=None):
+    def _prepare_dfs(self, df_names, df_role):
+        """
+        Prepares a dictionary of DataFrames based on specified names and their intended role.
+
+        This method attempts to fetch each DataFrame by name from the pipeline's `dfs` attribute. 
+        If any specified DataFrame is not found, it records the missing DataFrame names. After 
+        attempting to gather all specified DataFrames, if any are missing, it issues a warning and returns `None`.
+
+        Parameters
+        ----------
+        df_names : list of str
+            The names of the DataFrames to be prepared. These names should correspond to keys in the pipeline's `dfs` attribute.
+        df_role : str
+            A descriptive string indicating the role of the specified DataFrames (e.g., 'input' or 'output'). 
+            Used for generating meaningful warning messages.
+
+        Returns
+        -------
+        dict or None
+            If all specified DataFrames are found, returns a dictionary where keys are DataFrame names 
+            and values are the DataFrame objects. Returns `None` if any specified DataFrames are missing.
+
+        Raises
+        ------
+        UserWarning
+            Warns the user if any of the specified DataFrame names are not found within the pipeline.
+
+        Examples
+        --------
+        Assuming the pipeline has a DataFrame registered under the name 'sales_data':
+
+        >>> gpt_pipeline._prepare_dfs(['sales_data'], 'input')
+        {'sales_data': <DataFrame object>}
+
+        If a specified DataFrame does not exist:
+
+        >>> gpt_pipeline._prepare_dfs(['nonexistent_data'], 'input')
+        UserWarning: Specified input DataFrame(s) nonexistent_data not found in pipeline. Please ensure they are created before running process().
+        None
+        """
+
+        dfs = {}
+        missing_dfs = []
+        for df_name in df_names:
+            try:
+                dfs[df_name] = self.dfs[df_name][0]
+            except KeyError:
+                missing_dfs.append(df_name)
+        
+        if missing_dfs:
+            missing_str = ", ".join(missing_dfs)
+            warnings.warn(f"Specified {df_role} DataFrame(s) {missing_str} not found in pipeline. Please ensure they are created before running process().",
+                            UserWarning)
+            return None
+        return dfs
+
+    def process_text(self, system_message, user_message, injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None):
         """
         Process a single text through the GPT broker, handling defaults and injections.
 
@@ -411,21 +509,21 @@ class GPTPipeline:
         user_message : str
             The user message to process.
         injections : list, optional
-            A list of strings to inject into the system message.
+            A list of strings to inject into the system message. Useful so that prompts can be somewhat customized for a particular text.
         model : str, optional
-            The model to use, 'default' uses the pipeline default.
-        model_context_window : int or 'default', optional
-            The context window size, 'default' uses the pipeline default.
-        temp : float or 'default', optional
-            The temperature setting for the GPT model, 'default' uses the pipeline default.
+            The model to use, None uses the pipeline default.
+        model_context_window : int or None, optional
+            The context window size, None uses the pipeline default.
+        temp : float or None, optional
+            The temperature setting for the GPT model, None uses the pipeline default.
         examples : list, optional
             A list of examples to provide context for the GPT model.
-        timeout : int or 'default', optional
-            The timeout in seconds for the GPT model request, 'default' uses the pipeline default.
-        safety_multiplier : float or 'default', optional
-            The safety multiplier to adjust the maximum token length, 'default' uses the pipeline default.
+        timeout : int or None, optional
+            The timeout in seconds for the GPT model request, None uses the pipeline default.
+        safety_multiplier : float or None, optional
+            The safety multiplier to adjust the maximum token length, None uses the pipeline default.
         max_chunks_per_text : int, optional
-            The maximum number of chunks into which the input text is split.
+            The maximum number of chunks into which the input text is split. Default is all chunks are analyzed.
 
         Returns
         -------
@@ -434,10 +532,8 @@ class GPTPipeline:
         """
 
         # replace defaults
-        if model is None:
-            model = self.default_vals['model']
-        if model_context_window is None:
-            model_context_window = self.default_vals['context_window']
+        model = model or self.default_vals['model']
+        model_context_window = model_context_window or self.default_vals['context_window']
         if temp is None or not isinstance(temp, float) or temp > 1.0 or temp < 0.0:
             temp = self.default_vals['temperature']
         if timeout is None or not isinstance(timeout, int) or timeout < 0:
@@ -467,14 +563,14 @@ class GPTPipeline:
             text_chunks = text_chunks[0:max_chunks_per_text]
 
         # setup progress bar
-        pbar = tqdm(total=len(text_chunks))  # 100% is the completion
+        pbar = tqdm(total=len(text_chunks))
 
         responses = []
         for chunk in text_chunks:
-            response = self.gpt_broker.get_chatgpt_response(system_message, chunk, model, model_context_window, temp, examples, timeout)
+            response = self.gpt_broker.get_chatgpt_response(self.LOG, system_message, chunk, model, model_context_window, temp, examples, timeout)
             responses.append((system_message, chunk, examples, response))
             pbar.update(1)
-
+            pbar.refresh()
 
         return responses
     

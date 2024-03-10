@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 
 setup(
-    name = 'gptpipeline',
+    name = 'GPTPipelines',
     version = '0.0.1',
     author = 'Natalie Harris',
     author_email = 'mzg857@vols.utk.edu',
@@ -22,7 +22,8 @@ setup(
     install_requires=[
         'openai>=1.9.0,<2.0.0',
         'pandas>=2.2.0,<3.0.0',
-        'tqdm>=4.66.0,<5.0.0'
+        'tqdm>=4.66.0,<5.0.0',
+        'tiktoken>=0.6.0,<1.0.0'
     ],
     python_requires = '>=3.8, <4'
 )

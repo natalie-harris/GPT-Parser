@@ -3,31 +3,75 @@ import openai
 from openai import OpenAI
 import tiktoken
 import time
+import logging
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 class ChatGPTBroker:
-    def __init__(self, api_key, organization=""):
+    """
+    A broker class for interacting with the OpenAI API to utilize ChatGPT models.
+
+    This class abstracts away the details of making requests to the OpenAI API,
+    handling tokenization of messages, splitting messages to fit model's context window,
+    and fetching responses from ChatGPT models.
+
+    Parameters
+    ----------
+    api_key : str
+        The API key used for authenticating requests to the OpenAI API.
+    organization : str, optional
+        The organization ID for billing and usage tracking on OpenAI's platform.
+        Defaults to an empty string, which uses the default organization tied to the API key.
+    verbose: bool, optional
+        If true, print out verbose output of https requests, warnings/errors, etc. related to the ChatGPT api .
+        Defaults to False.
+
+    Attributes
+    ----------
+    api_key : str
+        Stores the API key for the OpenAI API.
+    client : openai.OpenAI
+        The OpenAI client instance configured with the provided API key and organization.
+    verbose: bool
+        Stores user's preference for verbose output.
+    """
+
+    def __init__(self, api_key, organization=None, verbose=False):
+        """
+        Initializes the ChatGPTBroker with the given API key and optional organization and verbosity preference.
+        """
+
         self.api_key = api_key
-        if organization != "":
+        if organization is not None:
             self.client = OpenAI(api_key=api_key, organization=organization)
         else:
             self.client = OpenAI(api_key=api_key)
+        self.verbose=verbose
+
+        if not self.verbose:
+            logging.getLogger("httpx").setLevel(logging.WARNING)
+            logging.basicConfig(level=logging.INFO, format='%(message)s')
 
     def get_tokenized_length(self, system_message, user_message, model, examples=[]):
         """
-        Calculate the number of tokens that a text string will be tokenized into 
-        by a specific model. Optionally, additional content can be appended to the 
-        text from a list of example dictionaries.
-        
-        Parameters:
-        text (str): The input text string to be tokenized.
-        model (str): The name or identifier of the model whose tokenizer will be used.
-        examples (list of dict, optional): A list of dictionaries where each dictionary 
-                                        should have a key "content" with text to append 
-                                        to the input text string. Defaults to an empty list.
-        
-        Returns:
-        int: The number of tokens the input text (plus additional content, if provided) 
-            is tokenized into by the specified model.
+        Calculates the total number of tokens for a given set of messages and examples,
+        based on the tokenization process of a specified model.
+
+        Parameters
+        ----------
+        system_message : str
+            The system message or prompt to prepend to the user message.
+        user_message : str
+            The user message to be tokenized.
+        model : str
+            The model identifier to use for tokenization, determining how text is split into tokens.
+        examples : list of dict, optional
+            Additional examples to include in the tokenization, where each example is a dictionary
+            containing at least a "content" key. Defaults to an empty list.
+
+        Returns
+        -------
+        int
+            The total number of tokens after tokenizing the combined messages and examples.
         """
         
         total_text = system_message + user_message
@@ -44,24 +88,33 @@ class ChatGPTBroker:
         # and then calculate the number of tokens in the tokenized text.
         num_tokens = len(encoding.encode(total_text))
         
-        # Return the number of tokens in the tokenized text.
         return num_tokens
     
     # safety multipliers limits max message length just in case tiktoken incorrectly splits tokens
     def split_message_to_lengths(self, system_message, user_message, model, max_context_window, examples=[], safety_multiplier=1.0):
         """
-        Returns chunks of text that stay within a specified token limit.
-        
-        Args:
-        - system_message (str): The message to prepend to each chunk of text.
-        - user_message (str): The full user message that needs to be split into chunks.
-        - model (str): The model being used, as listed on openai's website.
-        - max_context_window (int): the maximum number of tokens per chunk
-        - examples (list, optional): List of examples for tokenization.
-        - safety
+        Splits a message into chunks that fit within a model's maximum context window, considering
+        safety multipliers and additional examples.
 
-        Returns:
-        - chunks (list of strings): A list of chunks, where each chunk is a segment of text.
+        Parameters
+        ----------
+        system_message : str
+            The system message to prepend to each chunk.
+        user_message : str
+            The full user message to be split.
+        model : str
+            The identifier of the model to be used.
+        max_context_window : int
+            The maximum number of tokens that can be included in a single request.
+        examples : list, optional
+            A list of examples to consider for tokenization alongside the messages.
+        safety_multiplier : float, optional
+            A factor to apply to the max_context_window to reduce the risk of exceeding the token limit.
+
+        Returns
+        -------
+        list of str
+            A list of message chunks, each fitting within the specified token limit.
         """
 
         # print(f"This is the max context window: {max_context_window}")
@@ -107,27 +160,36 @@ class ChatGPTBroker:
         # else we need to split up the message into chunks. I may have a function that does this in original SBW parser
         return chunks
     
-    def get_chatgpt_response(self, system_message, user_message, model, model_context_window, temp=0, examples=[], timeout=15):
+    def get_chatgpt_response(self, LOG, system_message, user_message, model, model_context_window, temp=0, examples=[], timeout=15):
         """
-        Get a response from ChatGPT based on the user and system messages.
+        Fetches a response from ChatGPT based on a user's message and a system message.
 
-        Parameters:
-        - system_message (str): The system message to set the behavior of the chat model.
-        - user_message (str): The message from the user that the model will respond to.
-        - model (str): The GPT model the user wants to use. Models listed at https://platform.openai.com/docs/models.
-        - model_context_window (int): Maximum token length for the chosen model. Context windows listed with models at https://platform.openai.com/docs/models.
-        - temp (float, optional): Controls the randomness of the model's output (default is 0).
-        - examples (list, optional): Additional example messages for training the model (default is an empty list).
-        - timeout (int, optional): Controls timeout, in seconds, before the broker stops waiting for a response from OpenAI (default is 15).
+        Parameters
+        ----------
+        system_message : str
+            A message that defines the context or instructions for the ChatGPT model.
+        user_message : str
+            The user's message to which the ChatGPT model will respond.
+        model : str
+            The identifier of the ChatGPT model to use for generating the response.
+        model_context_window : int
+            The maximum length (in tokens) that the model can handle in a single prompt.
+        temp : float, optional
+            The temperature parameter to control the randomness of the response. Defaults to 0.
+        examples : list of dict, optional
+            A list of additional examples to provide context to the model. Defaults to an empty list.
+        timeout : int, optional
+            The timeout in seconds for waiting for a response from the API. Defaults to 15.
 
-        Returns:
-        - str: The generated response from the GPT model.
+        Returns
+        -------
+        str or None
+            The generated response from the ChatGPT model, or None if an error occurred.
         """
-
-
 
         tokenized_length = self.get_tokenized_length(system_message, user_message, model, examples)
         if tokenized_length > model_context_window:
+            logging.info('Prompt too long...')
             return ['Prompt too long...']
         
         # Prepare the messages to send to the Chat API
@@ -142,44 +204,44 @@ class ChatGPTBroker:
         # Continue trying until a response is generated
         retries = 0
         max_retries = 10
-        while not got_response and retries < max_retries:
-            try:
-                # Attempt to get a response from the GPT model
-                response = self.client.chat.completions.create(model=model,
-                messages=new_messages,
-                temperature=temp,
-                timeout=timeout)
-                
-                # Extract the generated text from the API response
-                generated_text = response.choices[0].message.content
-                got_response = True
-                return generated_text
-                
-            except openai.RateLimitError as err:
-                # Handle rate limit errors
-                if 'You exceeded your current quota' in str(err):
-                    print("You've exceeded your current billing quota. Go check on that!")
-                    return 'BILLING QUOTA ERROR'
-                num_seconds = 3
-                print(f"Waiting {num_seconds} seconds due to high volume of {model} users.")
-                time.sleep(num_seconds)
-                                
-            except openai.APITimeoutError as err:
-                # Handle request timeouts
-                num_seconds = 3
-                print(f"Request timed out. Waiting {num_seconds} seconds and retrying...")
-                retries += 1
-                time.sleep(num_seconds)
-                
-            except openai.InternalServerError as err:
-                # Handle service unavailability errors
-                num_seconds = 3
-                print(f"There's a problem at OpenAI's servers. Waiting {num_seconds} seconds and retrying request.")
-                time.sleep(num_seconds)
+        with logging_redirect_tqdm():
+            while not got_response and retries < max_retries:
+                try:
+                    # Attempt to get a response from the GPT model
+                    response = self.client.chat.completions.create(model=model,
+                    messages=new_messages,
+                    temperature=temp,
+                    timeout=timeout)
+                    
+                    # Extract the generated text from the API response
+                    generated_text = response.choices[0].message.content
+                    got_response = True
+                    return generated_text
+                    
+                except openai.RateLimitError as err:
+                    # Handle rate limit errors
+                    if 'You exceeded your current quota' in str(err):
+                        LOG.info("You've exceeded your current billing quota. Go check on that!")
+                        return 'BILLING QUOTA ERROR'
+                    num_seconds = 3
+                    LOG.info(f"Waiting {num_seconds} seconds due to high volume of {model} users.")
+                    time.sleep(num_seconds)
+                                    
+                except openai.APITimeoutError as err:
+                    # Handle request timeouts
+                    num_seconds = 3
+                    LOG.info(f"Request timed out. Waiting {num_seconds} seconds and retrying...")
+                    retries += 1
+                    time.sleep(num_seconds)
+                    
+                except openai.InternalServerError as err:
+                    # Handle service unavailability errors
+                    num_seconds = 3
+                    LOG.info(f"There's a problem at OpenAI's servers. Waiting {num_seconds} seconds and retrying request.")
+                    time.sleep(num_seconds)
 
-            except openai.APIError as err:
-                # Handle generic API errors
-                print("An error occurred. Retrying request.")
-
+                except openai.APIError as err:
+                    # Handle generic API errors
+                    LOG.info("An error occurred. Retrying request.")
 
         return None

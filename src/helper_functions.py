@@ -1,6 +1,6 @@
 def truncate(string, max_length):
     """
-    Truncates a string to a maximum specified length, appending "..." if truncation occurs.
+    Truncates a string to a maximum specified length, appending "..." if truncation occurs. The maximum length includes the appended '...'.
 
     If the string length exceeds `max_length`, it is truncated and ends with "...". 
     If the string length is less than or equal to `max_length`, it is returned unchanged.
@@ -19,10 +19,13 @@ def truncate(string, max_length):
         or the original string if no truncation was necessary.
     """
 
+    formatted_string = string.replace("\\r\\n", " ")
+    formatted_string = formatted_string.replace("\\n", " ")
     if max_length > 0 and len(string) > max_length:
-        return string[0:max_length-3] + "..."
+        formatted_string = formatted_string[0:max_length-3] + "..."
+        return formatted_string
     else:
-        return string
+        return formatted_string
     
 def get_incomplete_entries(df, complete_feature):
     """

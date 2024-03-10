@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 import pandas as pd
 import time
 from src.helper_functions import get_incomplete_entries, truncate
+import inspect
+import warnings
 
 class Module(ABC):
     """
@@ -455,7 +457,7 @@ class Code_Module(Module):
         The custom function to be executed by the module.
     """
 
-    def __init__(self, pipeline, code_config, process_function):
+    def __init__(self, pipeline, process_function, input_df_names=[], output_df_names=[]):
         """
         Initializes a Code_Module instance with specified custom code and configuration.
 
@@ -470,8 +472,76 @@ class Code_Module(Module):
         """
 
         super().__init__(pipeline=pipeline)
-        self.code_config = code_config
         self.process_function = process_function
+        self.input_df_names = input_df_names
+        self.output_df_names = output_df_names
+        self.func_args = {}
+
+    def setup_dfs(self):
+        """
+        Prepares and validates the input and output DataFrames for the code module.
+
+        This method inspects the parameters of the user-defined process function to determine if `input_dfs` 
+        and/or `output_dfs` are expected. It then attempts to prepare these DataFrame dictionaries based on the 
+        DataFrame names provided at module initialization. If any specified DataFrames are missing, it issues a warning 
+        and returns False to indicate unsuccessful setup.
+
+        Returns
+        -------
+        bool
+            Returns True if all specified DataFrames are successfully prepared and assigned. 
+            Returns False if any specified DataFrames are missing, indicating that the setup was unsuccessful.
+
+        Notes
+        -----
+        - The method utilizes a pipeline-level function `_prepare_dfs` to gather the DataFrames by their names. 
+        This function should return a dictionary of DataFrames if all specified names are found, or `None` if any 
+        are missing.
+        - Warnings are issued if the user's function expects `input_dfs` or `output_dfs` but the respective DataFrame 
+        names were not specified at module addition, or if the specified DataFrame names do not exist in the pipeline.
+
+        Examples
+        --------
+        >>> # Assuming 'input_df_names' were specified as ['sales_data'] during module initialization
+        >>> # and 'sales_data' DataFrame exists in the pipeline
+        >>> module.setup_df()
+        True
+
+        >>> # Assuming 'input_df_names' were specified as ['missing_data'] during module initialization,
+        >>> # but 'missing_data' DataFrame does not exist in the pipeline
+        >>> module.setup_df()
+        UserWarning: Specified input DataFrame(s) 'missing_data' not found in pipeline. Please ensure they are created before running process().
+        False
+        """
+
+        # Inspect the process_function parameters right in the __init__ method
+        params = inspect.signature(self.process_function).parameters
+
+        # Check for 'input_dfs' parameter and prepare if specified
+        if 'input_dfs' in params:
+            if not self.input_df_names:
+                warnings.warn("You've requested 'input_dfs' in your function but did not specify any input_df_names when adding the code module.",
+                            UserWarning)
+                self.func_args['input_dfs'] = {}
+            else:
+                input_dfs = self.pipeline._prepare_dfs(self.input_df_names, 'input')
+                if input_dfs is None:  # Missing one or more specified input_dfs
+                    return False
+                self.func_args['input_dfs'] = input_dfs
+
+        # Check for 'output_dfs' parameter and prepare if specified
+        if 'output_dfs' in params:
+            if not self.output_df_names:
+                warnings.warn("You've requested 'output_dfs' in your function but did not specify any output_df_names when adding the code module.",
+                            UserWarning)
+                self.func_args['output_dfs'] = {}
+            else:
+                output_dfs = self.pipeline._prepare_dfs(self.output_df_names, 'output')
+                if output_dfs is None:  # Missing one or more specified output_dfs
+                    return False
+                self.func_args['output_dfs'] = output_dfs
+
+        return True
 
     def process(self):
         """
@@ -485,10 +555,14 @@ class Code_Module(Module):
             The return value of the custom process_function, typically True if processing occurred and False otherwise.
         """
 
-        # Call the provided function with input_data
-        # process_function needs to return False if it didn't take input from a df, and True if it did
-        return self.process_function(self.pipeline)
+        # NOTE: In user guides, be sure to explain that in order to receive an easy-to-access list of requested dfs, 
+        # the user function has to include either/both 'input_dfs' or 'output_dfs' EXACTLY in the the parameters
+        # list, and include a proper list of its associated df names in add_code_module.
 
+        # Dynamically call the user's process function with the prepared arguments
+        result = self.process_function(self.pipeline, **self.func_args)
+        return result
+    
 class Duplication_Module(Module):
     """
     A module for duplicating entries from an input DataFrame to multiple output DataFrames.
