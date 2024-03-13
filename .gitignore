@@ -1,5 +1,5 @@
 # Changelogs
-changes.txt
+changelog.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -31,9 +31,6 @@ MANIFEST
 
 # API Keys
 openai_key.txt
-
-# Docs Folder
-docs/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
