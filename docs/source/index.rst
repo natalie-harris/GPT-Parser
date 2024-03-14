@@ -3,6 +3,8 @@ Welcome to GPTPipelines Documentation
 
 GPTPipelines is a powerful Python package designed to create flexible and modular pipelines for analyzing natural language data using OpenAI's ChatGPT API. With GPTPipelines, users can efficiently process large volumes of text, extract meaningful insights, and collect tabular data, all facilitated by user-customizable modules connected through pandas DataFrames.
 
+https://github.com/natalie-harris/GPTPipelines
+
 Quick Links
 -----------
 * :ref:`installation`
@@ -33,7 +35,7 @@ GPTPipelines enables seamless integration of natural language processing tasks i
 - Modular design for easy customization and extension
 - Integration with ChatGPT API for natural language understanding
 - Use of pandas DataFrames to streamline data manipulation and analysis
-- Comprehensive API for developing custom pipeline modules
+- API for developing custom pipeline modules
 
 Getting Started
 ---------------

@@ -319,7 +319,7 @@ class ChatGPT_Module(GPT_Module):
         self.examples = examples
         self.injection_columns = injection_columns
 
-    def setup_df(self):
+    def setup_dfs(self):
         """
         Sets up the input and output DataFrames based on module configuration.
 
@@ -337,10 +337,6 @@ class ChatGPT_Module(GPT_Module):
 
         features_dtypes = self.pipeline.dfs[self.input_df_name][0].dtypes
         features_with_dtypes = list(features_dtypes.items())
-
-        # print(f"FEATURES: {features_with_dtypes}")
-        # print(f"{self.input_text_column}")
-        # print(f"{self.input_completed_column}")
 
         features = []
         dtypes = []

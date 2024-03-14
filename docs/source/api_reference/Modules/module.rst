@@ -3,7 +3,7 @@
 Module Class
 ============
 
-.. autoclass:: module.Module
+.. autoclass:: gptpipelines.module.Module
    :members:
    :undoc-members:
    :show-inheritance:

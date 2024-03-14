@@ -1,8 +1,6 @@
 .. _quick_start:
 
 Get Started Quickly
-========================================
+===================
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+This section goes over the basics by showing you how to set up a simple pipeline. If you haven't installed GPTPipelines yet, check out :ref:`installation`.

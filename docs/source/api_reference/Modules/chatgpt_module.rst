@@ -3,7 +3,7 @@
 ChatGPT Module Class
 ====================
 
-.. autoclass:: module.ChatGPT_Module
+.. autoclass:: gptpipelines.module.ChatGPT_Module
    :members:
    :undoc-members:
    :show-inheritance:

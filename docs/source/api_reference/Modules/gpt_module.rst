@@ -3,7 +3,7 @@
 GPT Module Class
 ================
 
-.. autoclass:: module.GPT_Module
+.. autoclass:: gptpipelines.module.GPT_Module
    :members:
    :undoc-members:
    :show-inheritance:

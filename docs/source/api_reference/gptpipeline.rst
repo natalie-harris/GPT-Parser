@@ -3,7 +3,7 @@
 Pipeline Class
 ================
 
-.. autoclass:: gptpipeline.GPTPipeline
+.. autoclass:: gptpipelines.gptpipeline.GPTPipeline
    :members:
    :undoc-members:
    :show-inheritance:

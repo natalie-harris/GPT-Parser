@@ -6,6 +6,8 @@ import pandas as pd
 import logging
 from tqdm import tqdm
 import warnings
+from datetime import datetime
+import os
 
 class GPTPipeline:
     """
@@ -28,7 +30,7 @@ class GPTPipeline:
     modules : dict
         Maps module names to their respective module instances {Name: module}.
     dfs : dict
-        Maps DataFrame names to tuples {Name: (DataFrame, destination path)}, managing input and output data.
+        Maps DataFrame names to tuples {Name: (DataFrame, destination folder)}, managing input and output data.
     gpt_broker : ChatGPTBroker
         Handles interactions with the ChatGPT API, utilizing the provided API key.
     LOG : logging.Logger
@@ -51,7 +53,7 @@ class GPTPipeline:
         """
 
         self.modules = {} # {name: module}
-        self.dfs = {} # {name: (df, dest_path)}
+        self.dfs = {} # {name: (df, dest_folder)}
         self.gpt_broker = ChatGPTBroker(api_key, organization=organization, verbose=verbose_chatgpt_api)
 
         # Set up basic configuration for logging
@@ -201,7 +203,7 @@ class GPTPipeline:
         dupe_module = Duplication_Module(pipeline=self, input_df_name=input_df_name, output_df_names=output_df_names, input_completed_column=input_completed_column, delete=delete)
         self.modules[name] = dupe_module
 
-    def add_dfs(self, names, dest_path=None, features={}):
+    def add_dfs(self, names, dest_folder=None, features={}):
         """
         Add multiple DataFrames to the pipeline.
 
@@ -209,20 +211,19 @@ class GPTPipeline:
         ----------
         names : list of str
             The names of the DataFrames to add.
-        dest_path : str, optional
-            The destination path for the DataFrames. A unique suffix will be added based on the DataFrame name.
+        dest_folder : str, optional
+            The destination path for the DataFrames. A unique suffix will be added based on the DataFrame name. If dest_folder isn't specified, the DataFrame data will not be saved.
         features : dict, optional
             A dictionary specifying the features (columns) and their data types for the new DataFrames.
         """
 
         for name in names:
-            if dest_path is not None:
-                new_dest_path = dest_path + "_" + name
-                self.add_df(name, dest_path=new_dest_path, features=features)
+            if dest_folder is not None:
+                self.add_df(name, dest_folder=dest_folder, features=features)
             else:
                 self.add_df(name, features=features)
 
-    def add_df(self, name, dest_path=None, features={}):
+    def add_df(self, name, dest_folder=None, features={}):
         """
         Add a single DataFrame to the pipeline.
 
@@ -230,22 +231,26 @@ class GPTPipeline:
         ----------
         name : str
             The name of the DataFrame to add.
-        dest_path : str, optional
-            The destination path for the DataFrame.
+        dest_folder : str, optional
+            The destination path for the DataFrame. If dest_folder isn't specified, the DataFrame data will not be saved.
         features : dict, optional
             A dictionary specifying the features (columns) and their data types for the new DataFrame.
         """
+
+        if name in self.dfs:
+            print(f"'{name}' label already assigned to another DataFrame. Each DataFrame must have a unique label.")
+            exit()
 
         try:
             df = pd.DataFrame(columns=[*features])
             if len(features) != 0:
                 df = df.astype(dtype=features)
-            self.dfs[name] = (df, dest_path)
+            self.dfs[name] = (df, dest_folder)
         except TypeError:
             print("'Features' format: {'feature_name': dtype, ...}")
             exit()
 
-    def import_texts(self, path, num_texts):
+    def import_texts(self, path, num_texts, files_list_folder=None, text_list_folder=None):
         """
         Import texts from a CSV file and populate DataFrames for file and text lists.
 
@@ -260,12 +265,20 @@ class GPTPipeline:
         files_parent_folder = Path(path).parent.absolute()
         files_df = pd.read_csv(path, sep=',')
         text_df = pd.DataFrame(columns=["Source File", "Full Text", "Completed"])
-        self.dfs["Files List"] = (files_df, files_parent_folder)
-        self.dfs["Text List"] = (text_df, files_parent_folder)
+
+        if files_list_folder is not None:
+            self.dfs["Files List"] = (files_df, files_parent_folder)
+        else:
+            self.dfs["Files List"] = (files_df, None)
+
+        if text_list_folder is not None:
+            self.dfs["Text List"] = (text_df, files_parent_folder)
+        else:
+            self.dfs["Text List"] = (text_df, None)
 
         self.add_module("Valve Module", Valve_Module(pipeline=self, num_texts=num_texts))
 
-    def import_csv(self, name, dest_path): # dest_path must point to the folder that the csv file is located in
+    def import_csv(self, name, dest_folder): # dest_path must point to the folder that the csv file is located in
         """
         Import a CSV file into a DataFrame.
 
@@ -277,8 +290,41 @@ class GPTPipeline:
             The destination path where the CSV file is located.
         """
 
-        df = pd.read_csv(dest_path + name)
-        self.dfs[name] = (df, dest_path)
+        file_path = os.path.join(dest_folder, name)
+        df = pd.read_csv(file_path)
+        self.dfs[name] = (df, dest_folder)
+
+    def _save_dfs(self):
+        # Get the current date and time and format the date and time as a string 'YYYY-MM-DD_HH-MM-SS'
+        now = datetime.now()
+        timestamp = now.strftime('%Y-%m-%d_%H-%M-%S')
+
+        for df_name in self.dfs:
+            df = self.dfs[df_name][0]
+            dest_folder = self.dfs[df_name][1]
+
+            if dest_folder is None:
+                continue
+
+            # build file name and path
+            suffix = 0
+            full_filename = f"{df_name}_{timestamp}.csv"
+            full_path = os.path.join(dest_folder, full_filename)
+
+            # add suffix and keep incrementing it while filename already exists at destination folder
+            # this is so that we don't lose data by overwriting existing data or not saving new data
+            while os.path.exists(full_path):
+                suffix += 1
+
+                full_filename = f"{df_name}_{timestamp}_{suffix}.csv"
+                full_path = os.path.join(dest_folder, full_filename)
+
+            # Save the DataFrame to CSV
+            df.to_csv(full_path, index=False)
+
+            print(f"DataFrame {df_name} saved to {full_path}.")
+
+        return
 
     def process(self):
         """
@@ -304,7 +350,7 @@ class GPTPipeline:
                     finished_setup[module] = True
                     made_progress = True
                 elif isinstance(self.modules[module], ChatGPT_Module) and finished_setup[module] is not True:
-                    result = self.modules[module].setup_df()
+                    result = self.modules[module].setup_dfs()
                     finished_setup[module] = result
                     made_progress = result or made_progress
                 elif isinstance(self.modules[module], Duplication_Module) and finished_setup[module] is not True:
@@ -327,6 +373,7 @@ class GPTPipeline:
                 working = self.modules[module].process()
 
         # save each df if dest_path is specified for it
+        self._save_dfs()
 
     def print_modules(self):
         """
