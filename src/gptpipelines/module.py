@@ -78,7 +78,7 @@ class Valve_Module(Module):
         The output DataFrame where texts are stored.
     """
 
-    def __init__(self, pipeline, num_texts, max_at_once=0):
+    def __init__(self, pipeline, files_list_df_name, text_list_df_name, max_at_once=None, num_texts_to_analyze=None):
         """
         Initializes a Valve_Module instance.
 
@@ -94,30 +94,30 @@ class Valve_Module(Module):
 
         super().__init__(pipeline)
 
-        self.max_files_total = num_texts
-        if max_at_once >= 1:
-            self.max_files_at_once = max_at_once
-        else:
-            self.max_files_at_once = self.max_files_total
-        self.current_files = 0
-        self.total_ran_files = 0
-
-        self.input_df = pipeline.get_df("Files List")
-        self.output_df = pipeline.get_df("Text List")
+        self.input_df = pipeline.get_df(files_list_df_name)
+        self.output_df = pipeline.get_df(text_list_df_name)
 
         # Make sure we don't try to access files that don't exist
+        self.max_files_total = num_texts_to_analyze
+        self.max_files_at_once = max_at_once
         files_left = self.input_df[self.input_df['Completed'] == 0]['File Path'].nunique()
         if files_left == 0:
             print("There are no files left to be processed.")
-        elif (files_left < self.max_files_total):
+        elif self.max_files_total is None or files_left < self.max_files_total:
             file_plural = "file" if files_left == 1 else "files"
             print(f"Only {files_left} unprocessed {file_plural} remaining. Only processing {files_left} {file_plural} on this execution.")
             self.max_files_total = files_left
-            if (files_left < self.max_files_at_once):
+            if self.max_files_at_once is None or files_left < self.max_files_at_once:
                 self.max_files_at_once = files_left
 
-        # print(self.input_df)
-        # print(self.output_df)
+        if max_at_once is not None and max_at_once >= 1:
+            self.max_files_at_once = max_at_once
+        elif self.max_files_total is not None:
+            self.max_files_at_once = self.max_files_total
+        else:
+            self.max_files_at_once = 1
+        self.current_files = 0
+        self.total_ran_files = 0
 
     def process(self):
         """
@@ -199,11 +199,9 @@ class GPT_Module(Module):
         The context window size for the GPT model.
     safety_multiplier : float, optional
         A multiplier to adjust the maximum token length for safety.
-    delete : bool
-        Whether to delete entries from the input DataFrame after processing.
     """
 
-    def __init__(self, pipeline, input_df_name, output_df_name, model=None, context_window=None, safety_multiplier=None, delete=False):
+    def __init__(self, pipeline, input_df_name, output_df_name, model=None, context_window=None, safety_multiplier=None):
         """
         Initializes a GPT_Module instance.
 
@@ -234,7 +232,6 @@ class GPT_Module(Module):
         self.model = model
         self.context_window = context_window
         self.safety_multiplier = safety_multiplier
-        self.delete = delete
 
     @abstractmethod
     def process(self):
@@ -246,18 +243,6 @@ class GPT_Module(Module):
 
         pass
 
-"""
-gpt_config: dictionary: {
-        input_df (str)
-        output_df (str)
-        delete (bool)
-        model (str)
-        context_window (int)
-        temp (float)
-        prompt (str)
-        examples (dict) # not implemented yet
-    }
-"""
 class ChatGPT_Module(GPT_Module):
     """
     A module designed to process texts through a ChatGPT model.
@@ -293,7 +278,7 @@ class ChatGPT_Module(GPT_Module):
         The name of the column in the output DataFrame that marks whether the entry has been processed.
     """
 
-    def __init__(self, pipeline, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+    def __init__(self, pipeline, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
         """
         Initializes a ChatGPT_Module instance with specified configuration.
 
@@ -302,7 +287,7 @@ class ChatGPT_Module(GPT_Module):
         Inherits all parameters from the GPT_Module class and introduces additional parameters for ChatGPT module configuration.
         """
         
-        super().__init__(pipeline=pipeline,input_df_name=input_df_name,output_df_name=output_df_name, model=model, context_window=context_window,safety_multiplier=safety_multiplier,delete=False)
+        super().__init__(pipeline=pipeline,input_df_name=input_df_name,output_df_name=output_df_name, model=model, context_window=context_window,safety_multiplier=safety_multiplier)
 
         self.max_chunks_per_text = max_chunks_per_text
         self.temperature=temperature

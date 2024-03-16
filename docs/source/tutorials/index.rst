@@ -1,8 +1,10 @@
 .. _tutorials:
 
 Tutorials
-========================================
+=========
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Table of Contents
+
+   library_analysis_tutorial

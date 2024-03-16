@@ -8,6 +8,7 @@ from tqdm import tqdm
 import warnings
 from datetime import datetime
 import os
+import glob
 
 class GPTPipeline:
     """
@@ -39,7 +40,7 @@ class GPTPipeline:
         Default configuration values for the pipeline, including settings for API interactions.
     """
 
-    def __init__(self, api_key, organization=None, verbose_chatgpt_api=False, verbose_pipeline_output=False):
+    def __init__(self, api_key=None, path_to_api_key=None, organization=None, verbose_chatgpt_api=False, verbose_pipeline_output=False, model=None, context_window=None, temperature=0.0, safety_multiplier=0.95, timeout=15):
         """
         Initializes the GPTPipeline with the provided API key.
 
@@ -52,22 +53,28 @@ class GPTPipeline:
             The API key required for authenticating requests to the GPT API.
         """
 
+        if api_key is not None:
+            self.api_key = api_key
+        elif path_to_api_key is not None:
+            with open(path_to_api_key, "r") as fd:
+                self.api_key = fd.read()
+        else:
+            print("Either the api key or the path to the api key must be specified at GPTPipeline initialization.")
+            exit()
+
         self.modules = {} # {name: module}
         self.dfs = {} # {name: (df, dest_folder)}
-        self.gpt_broker = ChatGPTBroker(api_key, organization=organization, verbose=verbose_chatgpt_api)
+        self.gpt_broker = ChatGPTBroker(api_key=self.api_key, organization=organization, verbose=verbose_chatgpt_api)
 
         # Set up basic configuration for logging
         self.LOG = logging.getLogger(__name__)
         logging.basicConfig(level=logging.INFO)
 
-        self.default_vals = {
-            'delete': False,
-            'model': 'No Model Specified', # make sure to check for if no model is specified 
-            'context_window': 0,
-            'temperature': 0.0,
-            'safety multiplier': .95,
-            'timeout': 15
-        }
+        self.default_model = model
+        self.default_context_window = context_window
+        self.default_temperature = temperature
+        self.default_safety_multiplier = safety_multiplier
+        self.default_timeout = timeout
 
         if not verbose_pipeline_output:
             warnings.formatwarning = lambda message, category, filename, lineno, line=None: f'\033[91m{category.__name__}:\033[0m {message}\n'
@@ -82,9 +89,9 @@ class GPTPipeline:
             The default configuration values.
         """
 
-        return self.default_vals
+        return self.default_model, self.default_context_window, self.default_temperature, self.default_safety_multiplier, self.default_timeout
     
-    def set_default_values(self, default_values):
+    def set_default_values(self, model=None, context_window=None, temperature=None, safety_multiplier=None, timeout=None):
         """
         Set default configuration values.
 
@@ -94,11 +101,147 @@ class GPTPipeline:
             A dictionary of default values to update.
         """
 
-        for key, value in default_values.items():
-            if key in self.default_vals:
-                self.default_vals[key] = value
-            else:
-                print(f"'{key}' is not a valid variable name.")
+        if model is not None:
+            self.default_model = model
+        if context_window is not None:
+            self.default_context_window = context_window
+        if temperature is not None:
+            self.default_temperature = temperature
+        if safety_multiplier is not None:
+            self.default_safety_multiplier = safety_multiplier
+        if timeout is not None:
+            self.default_timeout = timeout
+
+    def _generate_primary_csv(self, folder_path, dest_csv_path=None, csv_file_name='files.csv', default_features={}):
+        """
+        Generates a CSV file listing files in a folder to be used as the first df in a GPTPipeline.
+
+        This function searches for text files (`.txt` and `.text`) in a specified folder, compiles their
+        file paths, and generates a CSV file with these paths and additional default features. If a CSV file
+        with the specified name already exists at the destination path, the function returns `False` without
+        creating a new file. Otherwise, it creates a new CSV file, populating it with the default feature values
+        and the file paths of the text files found.
+
+        Parameters
+        ----------
+        folder_path : str
+            The path to the folder from which .txt and .text file paths will be collected.
+        dest_csv_path : str, optional
+            The destination path where the CSV file will be saved. If `None` (default), uses `folder_path`.
+        csv_file_name : str, optional
+            The name of the CSV file to be created (default is 'files.csv').
+        default_features : dict, optional
+            A dictionary specifying the default features and their values to include in the CSV file. Each key-value
+            pair corresponds to a column name and its default value (default is an empty dict).
+
+        Returns
+        -------
+        bool
+            `True` if a new CSV file was successfully created; `False` if the CSV file already exists at the
+            specified destination path.
+
+        Examples
+        --------
+        Create a CSV file 'data.csv' in '/path/to/destination' directory listing all text files from 
+        '/path/to/folder', with additional columns 'feature1' and 'feature2' having default values 'default1' 
+        and 'default2', respectively:
+
+        >>> generate_primary_csv('/path/to/folder', '/path/to/destination', 'data.csv', 
+                                default_features={'feature1': 'default1', 'feature2': 'default2'})
+        True
+
+        Notes
+        -----
+        The function checks for the existence of the specified CSV file at the beginning and immediately returns
+        `False` if the file already exists, ensuring that existing data is not overwritten.
+        """
+
+        if dest_csv_path is None:
+            dest_csv_path = folder_path
+
+        # Construct the full path for the csv file
+        full_csv_path = os.path.join(dest_csv_path, csv_file_name)
+        
+        # Check if the CSV file already exists
+        if os.path.exists(full_csv_path):
+            return False
+
+        # Initialize the DataFrame with 'File Path' and 'Complete' columns first
+        columns = ['File Path', 'Completed'] + list(default_features.keys())
+        df = pd.DataFrame(columns=columns)
+
+        # Identify all .txt or .text files in the folder
+        rows_to_add = []
+        for file_path in glob.glob(f"{folder_path}/*.txt") + glob.glob(f"{folder_path}/*.text"):
+            # Create a new row with default values, setting 'File Path' and 'Complete'
+            new_row = {'File Path': file_path, 'Completed': 0}
+            new_row.update(default_features)
+            rows_to_add.append(new_row)
+
+        # If there are no files, return False
+        if not rows_to_add:
+            return False
+
+        # Concatenate the new rows to the DataFrame
+        df = pd.concat([df, pd.DataFrame(rows_to_add)], ignore_index=True)
+
+        # Write DataFrame to CSV
+        df.to_csv(full_csv_path, index=False)
+
+        return True    
+
+    def import_texts(self, folder_path, file_name, num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, text_csv_file_name="text.csv", max_files_at_once=None):
+        """
+        Import texts from a CSV file and populate DataFrames for file and text lists.
+
+        Parameters
+        ----------
+        path : str
+            The file path to the CSV containing the texts.
+        num_texts : int
+            The number of texts to import.
+        """
+
+        if generate_text_csv is True:
+            text_csv_dest_folder = text_csv_dest_folder or folder_path # if the user doesn't specify where the text csv should go, just put it in the folder with the texts
+            self._generate_primary_csv(folder_path=folder_path, dest_csv_path=text_csv_dest_folder, csv_file_name=text_csv_file_name)
+
+        path = os.path.join(folder_path, file_name)
+        
+        files_df = pd.read_csv(path, sep=',')
+        text_df = pd.DataFrame(columns=["Source File", "Full Text", "Completed"])
+
+        if files_list_dest_folder is not None:
+            self.dfs[files_list_df_name] = (files_df, folder_path)
+        else:
+            self.dfs[files_list_df_name] = (files_df, None)
+
+        if text_list_dest_folder is not None:
+            self.dfs[text_list_df_name] = (text_df, folder_path)
+        else:
+            self.dfs[text_list_df_name] = (text_df, None)
+
+        # Since users shouldn't need to interact directly with the valve module, 
+        # It should be ok to automatically generate a name and not let the user change it.
+        valve_module_name = " ".join(["Valve Module for", text_list_df_name])
+
+        self.add_module(valve_module_name, Valve_Module(pipeline=self, num_texts_to_analyze=num_texts_to_analyze, files_list_df_name=files_list_df_name, text_list_df_name=text_list_df_name, max_at_once=max_files_at_once))
+
+    def import_csv(self, name, dest_folder): # dest_path must point to the folder that the csv file is located in
+        """
+        Import a CSV file into a DataFrame.
+
+        Parameters
+        ----------
+        name : str
+            The name of the DataFrame.
+        dest_path : str
+            The destination path where the CSV file is located.
+        """
+
+        file_path = os.path.join(dest_folder, name)
+        df = pd.read_csv(file_path)
+        self.dfs[name] = (df, dest_folder)
 
     def add_module(self, name, module):
         """
@@ -116,7 +259,7 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, delete=False, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
         """
         Add a ChatGPT module to the pipeline.
 
@@ -144,8 +287,6 @@ class GPTPipeline:
             The safety multiplier to adjust the maximum token length.
         max_chunks_per_text : int, optional
             The maximum number of chunks into which the input text is split.
-        delete : bool, optional
-            Whether to delete the input DataFrame after processing.
         timeout : int, optional
             The timeout in seconds for GPT model requests.
         input_text_column : str, optional
@@ -160,7 +301,7 @@ class GPTPipeline:
             The name of the column indicating whether the output is completed.
         """
 
-        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, delete=delete, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
+        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
         self.modules[name] = gpt_module
 
     def add_code_module(self, name, process_function, input_df_names=[], output_df_names=[]):
@@ -249,50 +390,6 @@ class GPTPipeline:
         except TypeError:
             print("'Features' format: {'feature_name': dtype, ...}")
             exit()
-
-    def import_texts(self, path, num_texts, files_list_folder=None, text_list_folder=None):
-        """
-        Import texts from a CSV file and populate DataFrames for file and text lists.
-
-        Parameters
-        ----------
-        path : str
-            The file path to the CSV containing the texts.
-        num_texts : int
-            The number of texts to import.
-        """
-        
-        files_parent_folder = Path(path).parent.absolute()
-        files_df = pd.read_csv(path, sep=',')
-        text_df = pd.DataFrame(columns=["Source File", "Full Text", "Completed"])
-
-        if files_list_folder is not None:
-            self.dfs["Files List"] = (files_df, files_parent_folder)
-        else:
-            self.dfs["Files List"] = (files_df, None)
-
-        if text_list_folder is not None:
-            self.dfs["Text List"] = (text_df, files_parent_folder)
-        else:
-            self.dfs["Text List"] = (text_df, None)
-
-        self.add_module("Valve Module", Valve_Module(pipeline=self, num_texts=num_texts))
-
-    def import_csv(self, name, dest_folder): # dest_path must point to the folder that the csv file is located in
-        """
-        Import a CSV file into a DataFrame.
-
-        Parameters
-        ----------
-        name : str
-            The name of the DataFrame.
-        dest_path : str
-            The destination path where the CSV file is located.
-        """
-
-        file_path = os.path.join(dest_folder, name)
-        df = pd.read_csv(file_path)
-        self.dfs[name] = (df, dest_folder)
 
     def _save_dfs(self):
         # Get the current date and time and format the date and time as a string 'YYYY-MM-DD_HH-MM-SS'
@@ -579,14 +676,20 @@ class GPTPipeline:
         """
 
         # replace defaults
-        model = model or self.default_vals['model']
-        model_context_window = model_context_window or self.default_vals['context_window']
+        model = model or self.default_model
+        model_context_window = model_context_window or self.default_context_window
         if temp is None or not isinstance(temp, float) or temp > 1.0 or temp < 0.0:
-            temp = self.default_vals['temperature']
+            temp = self.default_temperature
         if timeout is None or not isinstance(timeout, int) or timeout < 0:
-            timeout = self.default_vals['timeout']
+            timeout = self.default_timeout
         if safety_multiplier is None or not isinstance(safety_multiplier, float) or safety_multiplier < 0.0:
-            safety_multiplier = self.default_vals['safety multiplier']    
+            safety_multiplier = self.default_safety_multiplier
+
+        # FIXME: process_text needs to check to make sure every variable exists and is of the correct type.
+        # If they aren't, then it needs to close the program gracefully so that we don't lose analyzed data.
+        if model is None or model_context_window is None:
+            print("No model was specified. Please specify a model in either the GPT module or as a GPTPipeline default value.")
+            exit()
 
         # inject our injections as a replacement for multiprompt module
         # allows for doing {{}} for edge case when user wants {} in their prompt without injecting into it

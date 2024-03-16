@@ -3,6 +3,4 @@
 Contributing
 ========================================
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+To report bugs, request features, or submit pull requests, visit the `GitHub repository <https://github.com/natalie-harris/GPTPipelines>`__!
