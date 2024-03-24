@@ -18,7 +18,7 @@ class Module(ABC):
         Reference to the GPTPipeline instance that the module is part of.
     """
 
-    def __init__(self, pipeline):
+    def __init__(self, pipeline, name=None):
         """
         Initialize a Module instance.
 
@@ -29,6 +29,7 @@ class Module(ABC):
         """
 
         self.pipeline = pipeline
+        self.name = name
 
     @abstractmethod
     def process(self):
@@ -94,6 +95,8 @@ class Valve_Module(Module):
 
         super().__init__(pipeline)
 
+        self.input_df_name = files_list_df_name
+        self.output_df_name = text_list_df_name
         self.input_df = pipeline.get_df(files_list_df_name)
         self.output_df = pipeline.get_df(text_list_df_name)
 
@@ -178,12 +181,12 @@ Two Types of Input Dataframe Format:
 NOTE: allow for custom Complete feature name in case multiple modules are accessing the same df
 """
 
-class GPT_Module(Module):
+class LLM_Module(Module):
     """
     An abstract base class for GPT modules.
 
     This class extends Module to define a structure for modules that interact with
-    GPT models for processing text data.
+    LLM models for processing text data.
 
     Attributes
     ----------
@@ -243,7 +246,7 @@ class GPT_Module(Module):
 
         pass
 
-class ChatGPT_Module(GPT_Module):
+class ChatGPT_Module(LLM_Module):
     """
     A module designed to process texts through a ChatGPT model.
 
@@ -278,7 +281,7 @@ class ChatGPT_Module(GPT_Module):
         The name of the column in the output DataFrame that marks whether the entry has been processed.
     """
 
-    def __init__(self, pipeline, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+    def __init__(self, pipeline, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Full Text', input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed'):
         """
         Initializes a ChatGPT_Module instance with specified configuration.
 
@@ -295,7 +298,7 @@ class ChatGPT_Module(GPT_Module):
         
         self.input_text_column = input_text_column
         self.input_completed_column = input_completed_column
-        self.output_text_column = output_text_column
+        self.output_text_column = output_text_column or input_text_column
         self.output_response_column = output_response_column
         self.output_completed_column = output_completed_column
 

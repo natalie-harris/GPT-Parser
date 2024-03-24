@@ -1,4 +1,4 @@
-from gptpipelines.module import Module, Valve_Module, ChatGPT_Module, Code_Module, Duplication_Module
+from gptpipelines.module import Module, Valve_Module, ChatGPT_Module, Code_Module, Duplication_Module, LLM_Module
 from gptpipelines.chatgpt_broker import ChatGPTBroker
 from gptpipelines.helper_functions import truncate, all_entries_are_true
 from pathlib import Path
@@ -9,6 +9,9 @@ import warnings
 from datetime import datetime
 import os
 import glob
+import networkx as nx
+from asciinet import graph_to_ascii
+
 
 class GPTPipeline:
     """
@@ -190,7 +193,7 @@ class GPTPipeline:
 
         return True    
 
-    def import_texts(self, folder_path, file_name, num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, text_csv_file_name="text.csv", max_files_at_once=None):
+    def import_texts(self, folder_path, file_name, num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, max_files_at_once=None):
         """
         Import texts from a CSV file and populate DataFrames for file and text lists.
 
@@ -204,9 +207,10 @@ class GPTPipeline:
 
         if generate_text_csv is True:
             text_csv_dest_folder = text_csv_dest_folder or folder_path # if the user doesn't specify where the text csv should go, just put it in the folder with the texts
-            self._generate_primary_csv(folder_path=folder_path, dest_csv_path=text_csv_dest_folder, csv_file_name=text_csv_file_name)
+            self._generate_primary_csv(folder_path=folder_path, dest_csv_path=text_csv_dest_folder, csv_file_name=file_name)
 
         path = os.path.join(folder_path, file_name)
+        print(path)
         
         files_df = pd.read_csv(path, sep=',')
         text_df = pd.DataFrame(columns=["Source File", "Full Text", "Completed"])
@@ -259,7 +263,7 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Text', input_completed_column='Completed', output_text_column='Text', output_response_column='Response', output_completed_column='Completed'):
+    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column=None, input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed'):
         """
         Add a ChatGPT module to the pipeline.
 
@@ -459,7 +463,9 @@ class GPTPipeline:
                     finished_setup[module] = result
                     made_progress = result or made_progress
 
+                
             if not made_progress:
+                print(finished_setup)
                 raise RuntimeError("Some dfs cannot be setup")
 
         # Set all modules to sequentially process until all of them no longer have any uncompleted processing tasks
@@ -724,3 +730,23 @@ class GPTPipeline:
 
         return responses
     
+    def visualize_pipeline(self):
+        # Create a networkx graph
+        G = nx.Graph()
+
+        for name, module in self.modules.items():
+            class_type = module.__class__
+            class_type_str = class_type.__name__ + '\n'
+            if issubclass(class_type, Valve_Module):
+                G.add_edge('DataFrame\n'+module.input_df_name, class_type_str+name)
+                G.add_edge('Valve_Module\n'+name, 'DataFrame\n'+module.output_df_name)
+            elif issubclass(class_type, LLM_Module):
+                G.add_edge('DataFrame\n'+module.input_df_name, class_type_str+name)
+                G.add_edge(class_type_str+name, 'DataFrame\n'+module.output_df_name)
+            elif issubclass(class_type, Duplication_Module):
+                G.add_edge('DataFrame\n'+module.input_df_name, class_type_str+name)
+                for output_df_name in module.output_df_names:
+                    G.add_edge(class_type_str+name, 'DataFrame\n'+output_df_name)
+
+        # Print the ASCII representation of the graph
+        print(graph_to_ascii(G))

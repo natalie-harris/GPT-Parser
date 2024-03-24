@@ -1,9 +1,9 @@
-.. _gpt_module:
+.. _llm_module:
 
-GPT Module Class
+LLM Module Class
 ================
 
-.. autoclass:: gptpipelines.module.GPT_Module
+.. autoclass:: gptpipelines.module.LLM_Module
    :members:
    :undoc-members:
    :show-inheritance:
