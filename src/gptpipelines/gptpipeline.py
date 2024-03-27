@@ -719,7 +719,7 @@ class GPTPipeline:
             text_chunks = text_chunks[0:max_chunks_per_text]
 
         # setup progress bar
-        pbar = tqdm(total=len(text_chunks))
+        pbar = tqdm(total=len(text_chunks), leave=False)
 
         responses = []
         for chunk in text_chunks:

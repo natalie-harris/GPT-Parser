@@ -1,6 +1,0 @@
-1. Finished first draft of book analysis tutorial
-2. Figured out how to display pipelines in the terminal using asciinet B)
-3. Added visualize_pipeline() function to display graph in terminal
-
-NOTE: Have to rename project LLMPipelines and add better support for non-GPT LLMs.
-Replace current library tutorial corpus with children's fiction at https://www.gutenberg.org/ebooks/bookshelf/18
