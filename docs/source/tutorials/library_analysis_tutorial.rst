@@ -3,7 +3,7 @@
 Book Analysis Tutorial
 ======================
 
-This tutorial goes over the basics of setting up a ``GPTPipeline``, performing analysis on a set of books, and saving results to a file. In this example, we'll identify each books' genres and group them by the ethical dilemmas they present to the reader.
+This tutorial goes over the basics of setting up a ``GPTPipeline``, performing analysis on a set of children's fiction books, and saving results to a file. In this example, we'll identify each books' genres and group them by the ethical dilemmas they present to the reader.
 
 Before you start, go ahead and get an api key from `OpenAI's website <https://platform.openai.com/api-keys>`__. This is necessary because it lets you use ChatGPT for analysis. Copy the key and save it into a file.
 
@@ -37,7 +37,7 @@ After installing ``GPTPipelines``, we need to import it into our python environm
 Setup
 ^^^^^
 
-We'll be performing analysis on the top 98 books downloaded from `Project Gutenberg <https://www.gutenberg.org/about/>`__ on March 12th, 2024. Download the books `here <https://drive.google.com/drive/folders/1UMsZpAgY7_c3py-Dpm5hRTupTbsgyv5_?usp=sharing>`__.
+We'll be performing analysis on the top 20 children's fiction books downloaded from `Project Gutenberg <https://www.gutenberg.org/about/>`__. Download the books `here <https://drive.google.com/drive/folders/1UMsZpAgY7_c3py-Dpm5hRTupTbsgyv5_?usp=sharing>`__.
 
 Next, define the absolute path to the folder containing the books:
 

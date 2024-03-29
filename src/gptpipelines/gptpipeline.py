@@ -193,6 +193,28 @@ class GPTPipeline:
 
         return True    
 
+    def _prepare_text_entries(self, df):
+        prepared_df = df.copy(deep=True)
+
+        # Iterate over each column in the DataFrame
+        for column in prepared_df.columns:
+            # Check if column data type is object; if so, it might contain string objects
+            if prepared_df[column].dtype == 'object' or prepared_df[column].dtype == 'string':
+                # Apply a function to each entry in the column
+         
+                prepared_df[column] = prepared_df[column].apply(lambda x: self._process_string_entry(x) if isinstance(x, str) else x)
+        
+        return prepared_df
+
+    def _process_string_entry(self, entry):
+        # Replace newline characters with literal '\n'
+        entry = entry.replace('\n', '\\n')
+        # Escape double quotes
+        entry = entry.replace('"', '\"')
+        # Surround the string with double quotes
+        entry = f'"{entry}"'
+        return entry
+        
     def import_texts(self, folder_path, file_name, num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, max_files_at_once=None):
         """
         Import texts from a CSV file and populate DataFrames for file and text lists.
@@ -420,8 +442,12 @@ class GPTPipeline:
                 full_filename = f"{df_name}_{timestamp}_{suffix}.csv"
                 full_path = os.path.join(dest_folder, full_filename)
 
+            prepared_df = self._prepare_text_entries(df)
+
+            print(prepared_df)
+                
             # Save the DataFrame to CSV
-            df.to_csv(full_path, index=False)
+            prepared_df.to_csv(full_path, index=False)
 
             print(f"DataFrame {df_name} saved to {full_path}.")
 
@@ -648,7 +674,7 @@ class GPTPipeline:
             return None
         return dfs
 
-    def process_text(self, system_message, user_message, injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None):
+    def process_text(self, system_message, user_message, injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None, module_name=None):
         """
         Process a single text through the GPT broker, handling defaults and injections.
 
@@ -719,7 +745,12 @@ class GPTPipeline:
             text_chunks = text_chunks[0:max_chunks_per_text]
 
         # setup progress bar
-        pbar = tqdm(total=len(text_chunks), leave=False)
+        if module_name is not None:
+            description = module_name
+        else:
+            description = "Processing"
+            
+        pbar = tqdm(total=len(text_chunks), leave=False, desc=description)
 
         responses = []
         for chunk in text_chunks:

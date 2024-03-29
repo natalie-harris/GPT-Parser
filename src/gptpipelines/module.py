@@ -4,6 +4,8 @@ import time
 from gptpipelines.helper_functions import get_incomplete_entries, truncate
 import inspect
 import warnings
+from transformers import pipeline as hf_pipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 class Module(ABC):
     """
@@ -79,7 +81,7 @@ class Valve_Module(Module):
         The output DataFrame where texts are stored.
     """
 
-    def __init__(self, pipeline, files_list_df_name, text_list_df_name, max_at_once=None, num_texts_to_analyze=None):
+    def __init__(self, pipeline, files_list_df_name, text_list_df_name, max_at_once=None, num_texts_to_analyze=None, name=None):
         """
         Initializes a Valve_Module instance.
 
@@ -93,7 +95,7 @@ class Valve_Module(Module):
             The maximum number of texts to hold in memory at once. Defaults to 0, which is treated as no limit.
         """
 
-        super().__init__(pipeline)
+        super().__init__(pipeline, name=name)
 
         self.input_df_name = files_list_df_name
         self.output_df_name = text_list_df_name
@@ -172,8 +174,60 @@ class Valve_Module(Module):
 
         return working
 
+class TransformersPipeline_Module(Module):
+    """
+    A generic class that allows the user to add transformers.pipeline objects
+    for various NLP tasks, with the ability to specify the model and tokenizer.
+    """
+
+    def __init__(self, pipeline, task, model=None, tokenizer=None, framework='pt', **pipeline_kwargs):
+        """
+        Initializes the TransformersPipeline_Module instance with a specified NLP task,
+        and optionally with a specific model and tokenizer.
+
+        Parameters:
+        - pipeline (GPTPipeline): The GPTPipeline instance to which the module belongs.
+        - task (str): The task to be performed by the transformers pipeline (e.g., 'sentiment-analysis').
+        - model (str, optional): The model ID or model instance to be used for the task.
+        - tokenizer (str, optional): The tokenizer ID or tokenizer instance to be used with the model.
+        - framework (str, optional): The framework to use ('pt' for PyTorch, 'tf' for TensorFlow).
+        - **pipeline_kwargs: Additional keyword arguments passed to the transformers pipeline.
+        """
+        super().__init__(pipeline, name=task)
+        # Initialize the Hugging Face pipeline with specified parameters
+        self.transformers_pipeline = hf_pipeline(task, model=model, tokenizer=tokenizer, framework=framework, **pipeline_kwargs)
+    
+    def process(self, input_texts):
+        """
+        Processes a list of input texts through the specified Hugging Face pipeline,
+        storing the output in a DataFrame.
+
+        Parameters:
+        - input_texts (list of str): The input texts to be processed by the pipeline.
+
+        Returns:
+        - pd.DataFrame: A DataFrame with two columns: 'input_text' and 'result',
+                        where 'result' contains the output from the pipeline.
+        """
+        # Ensure input_texts is a list of strings
+        if not isinstance(input_texts, list):
+            raise ValueError("input_texts must be a list of strings.")
+        
+        # Process each text through the pipeline and collect results
+        results = [self.transformers_pipeline(text) for text in input_texts]
+
+        # Create a DataFrame from the inputs and results
+        df = pd.DataFrame({
+            "input_text": input_texts,
+            "result": results
+        })
+
+        return df
+
+
+
 """
-GPT Modules take in a dataframe as input and write to a dataframe as output. 
+LLM Modules take in a dataframe as input and write to a dataframe as output. 
 Two Types of Input Dataframe Format:
 1 - Multiple System Prompts: System Prompt | User Prompt | Examples | Complete
 2 - Single System Prompt: User Prompt | Complete (System Prompt and Examples are provided elsewhere in module setup, and are applied the same to every user prompt)
