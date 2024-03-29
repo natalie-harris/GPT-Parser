@@ -13,15 +13,7 @@ Python
 Installation
 ^^^^^^^^^^^^
 
-Installing with pip:
-
-.. code-block:: bash
-
-   pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ GPTPipelines==0.0.1
-
-Note: The install command is pretty long since the project is currently stored on test.pypi.org instead of pypi.org. We need to add the extra pypi.org index link so that pip can install dependencies like the ``OpenAI`` package. This will change in the future!
-
-Be sure that your ``GPTPipelines`` version is the latest version found on `PyPI <https://test.pypi.org/project/GPTPipelines/0.0.1/#description>`__.
+See :ref:`installation` for installation details.
 
 
 Importing ``GPTPipelines``
@@ -51,7 +43,6 @@ and the path to your OpenAI api key:
 
    openai_key_path = "/path/to/your/api/key"
 
-
 Lastly, we'll define where we want the output data to go. Add the path to where you want the output files saved.
 
 .. code-block:: python
@@ -68,7 +59,7 @@ After that, we can specify some default values for our pipeline. This is helpful
 
 .. code-block:: python
 
-   pipeline.set_default_values(model='gpt-3.5-turbo', context_window=16385)
+   pipeline.set_default_values(gpt_model='gpt-3.5-turbo', gpt_context_window=16385)
 
 .. note::
    
@@ -83,15 +74,19 @@ Once the pipeline is set up, we can start loading our texts. The ``import_texts(
 
    pipeline.import_texts(books_folder_path, "files.csv")
 
-The ``import_texts()`` function also adds a special type of module to the pipeline called a ``Valve_Module``. This is a private class type which accesses the files referenced by the file paths in ``files.csv`` and adds the files' full texts to a new DataFrame.
+The ``import_texts()`` function also adds a special type of module to the pipeline called a ``Valve_Module``. This is a private class type which accesses the files referenced by the file paths in ``files.csv`` and adds the files' full texts to a new DataFrame called ``Text List``.
 
 Now we can get into analysis!
+
+.. note::
+   
+   The ``Valve_Module`` is designed to, by default, only import one text into the ``Text List`` DataFrame at a time. Once the text in the ``Text List`` DataFrame is completely analyzed, it is automatically deleted from the DataFrame. This is done to reduce the likelihood of running out of system memory when analyzing a large set of texts.
 
 
 Adding Modules
 ^^^^^^^^^^^^^^
 
-Analysis in ``GPTPipelines`` works in modules. A module is a piece of code that takes in information from one or more Pandas DataFrames, and spits out information into one or more different DataFrames. A complete ``GPTPipeline`` consists of one or more modules connected in series, with DataFrames in between to facilitate the transfer of information. When you called ``import_texts()``, it automatically created two DataFrames and the aforementioned ``Valve_Module`` in between them. The first DataFrame, called 'Files List' by default, contains all the information from your ``files.csv`` file. By stringing together different modules, you can conduct pretty advanced analysis!
+Analysis in ``GPTPipelines`` works in modules. A module is a piece of code that takes in information from one or more Pandas DataFrames, and spits out information into one or more different DataFrames. A complete ``GPTPipeline`` consists of one or more modules connected in series, with DataFrames in between to facilitate the transfer of information. When you called ``import_texts()``, it automatically created two DataFrames and a ``Valve_Module`` in between them. The first DataFrame, called 'Files List' by default, contains all the information from your ``files.csv`` file. By stringing together different modules, you can conduct pretty advanced analysis!
 
 Getting Genres from Texts
 .........................
@@ -128,6 +123,12 @@ We also need to give the ``ChatGPT_Module`` a prompt that it will respond to. Ev
 
    prompt="This GPT specializes in analyzing excerpts from texts to identify their specific genres, focusing on providing detailed sub-genre classifications. It outputs the three genres, aiming for specificity beyond broad categories, separated by the pipe character (|). This ensures concise and clear responses suitable for parsing by a Python script. The GPT is guided to delve into nuances within the text, seeking out elements that align with specialized niches within known genres, avoiding any extraneous text to facilitate seamless integration with automated processes.",
 
+We'll also add a message that goes right after the text it's analyzing that signifies that the text is done and to begin the prompted task. This is important because it reduces the chance that ChatGPT will ignore the prompt and autocomplete the text, producing useless information.
+
+.. code-block:: python
+   
+   end_message="\n***END OF TEXT, BEGIN LIST OF THREE GENRES SEPARATED BY '|'***\n",
+
 We need to tell the ``ChatGPT_Module`` what column in the input DataFrame the text is located. By default, the ``import_texts()`` function names this column ``Full Text``, so that's how we'll reference it.
 
 .. code-block:: python
@@ -149,6 +150,7 @@ When you're finished, this is what the final ``add_chatgpt_module()`` call shoul
       input_df_name='Text List', 
       output_df_name='Genre Predictions', 
       prompt="This GPT specializes in analyzing excerpts from texts to identify their specific genres, focusing on providing detailed sub-genre classifications. It outputs the three genres, aiming for specificity beyond broad categories, separated by the pipe character (|). This ensures concise and clear responses suitable for parsing by a Python script. The GPT is guided to delve into nuances within the text, seeking out elements that align with specialized niches within known genres, avoiding any extraneous text to facilitate seamless integration with automated processes.", 
+      end_message="\n***END OF TEXT, BEGIN LIST OF THREE GENRES SEPARATED BY '|'***\n",
       input_text_column='Full Text',
       output_response_column='Predicted Genres'
    )
@@ -158,13 +160,12 @@ We've successfully added a module!
 Adding a DataFrame
 ..................
 
-Now, we need to create the module's output DataFrame. Since we named the module's output DataFrame ``Genre Predictions``, we need to name the DataFrame the same thing. Be sure to add your data destination path too. This tells the DataFrame where it should be saved when analysis is finished:
+Now, we need to create the module's output DataFrame. Since we named the module's output DataFrame ``Genre Predictions``, we need to name the DataFrame the same thing.
 
 .. code-block:: python
 
-   pipeline.add_df('Genre Predictions', dest_folder=output_data_path)
+   pipeline.add_df('Genre Predictions')
 
-Now, when the ``ChatGPT_Module`` gets a response from ChatGPT, it has a place to put it! 
 
 Summarization of Ethical Dilemmas
 .................................
@@ -181,17 +182,18 @@ Now, we'll ask ChatGPT to summarize the chunk of text its given, focusing on the
       output_response_column='Summarized Dilemma'
    )
 
-Add this prompt to the ``add_chatgpt_module()`` call:
+Add this prompt and end message to the ``add_chatgpt_module()`` call:
 
 .. code-block:: python
 
-   prompt="You are a machine that summarizes dilemmas. Your role is to receive chunks of text from books and summarize them, specifically focusing on presenting the specific ethical dilemma given to the main character. When given a piece of text, carefully identify and extract the core ethical issue at play for the main character, ensuring to maintain neutrality and not to impose any external judgement. Your goal is to present the ethical dilemma in a clear, concise, and understandable manner, making it accessible to the user without requiring them to read the full text. Avoid spoilers outside of the ethical dilemma and ask for clarification if the text is too ambiguous or if the ethical dilemma isn't immediately apparent. Tailor your responses to highlight the complexity of the ethical dilemma, encouraging thoughtful reflection."
+   prompt="You are a machine that summarizes dilemmas. Your role is to receive chunks of text from books and summarize them, specifically focusing on presenting the specific ethical dilemma given to the main character. When given a piece of text, carefully identify and extract the core ethical issue at play for the main character, ensuring to maintain neutrality and not to impose any external judgement. Your goal is to present the ethical dilemma in a clear, concise, and understandable manner, making it accessible to the user without requiring them to read the full text. Avoid spoilers outside of the ethical dilemma and ask for clarification if the text is too ambiguous or if the ethical dilemma isn't immediately apparent. Tailor your responses to highlight the complexity of the ethical dilemma, encouraging thoughtful reflection.",
+   end_message="\n***END OF TEXT, BEGIN SUMMARY OF ETHICAL DILEMMA***\n"
 
 Then we'll add a dataframe to store the responses:
 
 .. code-block:: python
 
-   pipeline.add_df('Summarized Dilemmas', dest_folder=output_data_path)
+   pipeline.add_df('Summarized Dilemmas')
 
 Identification of Ethical Dilemmas
 ..................................
@@ -208,19 +210,24 @@ Lastly, we will use our generated summary of the dilemma to pick a dilemma that 
       output_response_column='Dilemmas'
    )
 
-Give the module this prompt:
+Give the module this prompt and end message:
 
 .. code-block:: python
 
-   prompt="You are a GPT designed to read a summary of text from a book and identify the primary ethical dilemma faced by the main character(s). Your task is to understand the story within the given text to make a judgement. While you can identify keywords, your primary focus should be on comprehending the context to ensure your judgement is reasonable. You must avoid any form of commentary or analysis beyond identifying the ethical dilemma and should not use pre-existing knowledge about the text. Always make your best guess without seeking clarifications, as the system does not accommodate back-and-forth interactions. Your responses should be strictly factual and straightforward, suitable for logging in a dataframe for programmatically grouping similar ethical dilemmas. The possible dilemmas you can identify are: Duty vs. Desire, Individual vs. Society, Justice vs. Mercy, Truth vs. Loyalty, Freedom vs. Security, Right vs. Wrong, Self-interest vs. Altruism, Tradition vs. Change, Nature vs. Progress, Honor vs. Survival, Knowledge vs. Ignorance, Love vs. Ambition, Fate vs. Free Will, Past vs. Future, Humanity vs. Technology, Empathy vs. Rationality, Sacrifice vs. Selfishness, None of these."
+   prompt="You are a GPT designed to read a summary of text from a book and identify the primary ethical dilemma faced by the main character(s). Your task is to understand the story within the given text to make a judgement. While you can identify keywords, your primary focus should be on comprehending the context to ensure your judgement is reasonable. You must avoid any form of commentary or analysis beyond identifying the ethical dilemma and should not use pre-existing knowledge about the text. Always make your best guess without seeking clarifications, as the system does not accommodate back-and-forth interactions. Your responses should be strictly factual and straightforward, suitable for logging in a dataframe for programmatically grouping similar ethical dilemmas. The possible dilemmas you can identify are: Duty vs. Desire, Individual vs. Society, Justice vs. Mercy, Truth vs. Loyalty, Freedom vs. Security, Right vs. Wrong, Self-interest vs. Altruism, Tradition vs. Change, Nature vs. Progress, Honor vs. Survival, Knowledge vs. Ignorance, Love vs. Ambition, Fate vs. Free Will, Past vs. Future, Humanity vs. Technology, Empathy vs. Rationality, Sacrifice vs. Selfishness, None of these.",
+   end_message="\n***END OF TEXT, BEGIN IDENTIFIED ETHICAL DILEMMA FROM LIST***\n"
 
-And create its output DataFrame:
+And create its output DataFrame. Be sure to add the data destination path you defined earlier too. This tells the DataFrame where it should be saved when analysis is finished:
 
 .. code-block:: python
 
    pipeline.add_df('Identified Dilemmas', dest_folder=output_data_path)
 
-Now you've finished creating the ``GPTPipeline``!
+Now you've finished creating the ``GPTPipeline``! If you want to see a visualization of your pipeline before running it, add the line ``pipeline.visualize_pipeline()`` to the end and execute the file. You should see something to the effect of:
+
+.. image:: ../_static/book_analysis_finished_visualization.png
+   :alt: Image of a flow chart visualizing the completed GPTPipeline
+   :align: center
 
 Processing Texts
 ^^^^^^^^^^^^^^^^
@@ -231,16 +238,16 @@ The last step is the simplest. Just run ``pipeline.process()``!
 
    pipeline.process()
 
-This file will run our analysis and then save each DataFrame to your output data folder. The last DataFrame actually holds all data that's accumulated throughout the pipeline, but we're saving all the DataFrames for completion's sake. If you want to see the final DataFrame after processing is complete, just run:
+This file will run our analysis and then save the complete final DataFrame to your output data folder. The last DataFrame holds all of the data that's accumulated throughout the pipeline, so we don't have to save each DataFrame. If you want to see the final DataFrame after processing is complete, just add this line to the end of the file:
 
 .. code-block:: python
 
    pipeline.print_df('Identified Dilemmas')
 
 
-Here's the completed file:
+And that's it! Here's the completed file:
 
-.. collapse:: book_analysis.py
+.. toggle:: book_analysis.py
 
    .. code-block:: python
 
@@ -253,7 +260,7 @@ Here's the completed file:
 
       # setup basic pipeline
       pipeline = gpt.GPTPipeline(path_to_api_key=openai_key_path)
-      pipeline.set_default_values(model='gpt-3.5-turbo', context_window=16385)
+      pipeline.set_default_values(gpt_model='gpt-3.5-turbo', gpt_context_window=16385)
       pipeline.import_texts(books_folder_path, "files.csv")
 
       # add pipeline modules after valve module
@@ -262,24 +269,27 @@ Here's the completed file:
          input_df_name='Text List', 
          output_df_name='Genre Predictions', 
          prompt="This GPT specializes in analyzing excerpts from texts to identify their specific genres, focusing on providing detailed sub-genre classifications. It outputs the three genres, aiming for specificity beyond broad categories, separated by the pipe character (|). This ensures concise and clear responses suitable for parsing by a Python script. The GPT is guided to delve into nuances within the text, seeking out elements that align with specialized niches within known genres, avoiding any extraneous text to facilitate seamless integration with automated processes.", 
+         end_message="\n***END OF TEXT, BEGIN LIST OF THREE GENRES SEPARATED BY '|'***\n",
          input_text_column='Full Text',
          output_response_column='Predicted Genres'
       )
-      pipeline.add_df('Genre Predictions', dest_folder=output_data_path)
+      pipeline.add_df('Genre Predictions')
       pipeline.add_chatgpt_module(
          name="Dilemma Summarizer",
          input_df_name='Genre Predictions', 
          output_df_name='Summarized Dilemmas',
          prompt="You are a machine that summarizes dilemmas. Your role is to receive chunks of text from books and summarize them, specifically focusing on presenting the specific ethical dilemma given to the main character. When given a piece of text, carefully identify and extract the core ethical issue at play for the main character, ensuring to maintain neutrality and not to impose any external judgement. Your goal is to present the ethical dilemma in a clear, concise, and understandable manner, making it accessible to the user without requiring them to read the full text. Avoid spoilers outside of the ethical dilemma and ask for clarification if the text is too ambiguous or if the ethical dilemma isn't immediately apparent. Tailor your responses to highlight the complexity of the ethical dilemma, encouraging thoughtful reflection.",
+         end_message="\n***END OF TEXT, BEGIN SUMMARY OF ETHICAL DILEMMA***\n",
          input_text_column='Full Text',
          output_response_column='Summarized Dilemma'
       )
-      pipeline.add_df('Summarized Dilemmas', dest_folder=output_data_path)
+      pipeline.add_df('Summarized Dilemmas')
       pipeline.add_chatgpt_module(
          name="Dilemma Identifier",
          input_df_name='Summarized Dilemmas', 
          output_df_name='Identified Dilemmas', 
          prompt="You are a GPT designed to read a summary of text from a book and identify the primary ethical dilemma faced by the main character(s). Your task is to understand the story within the given text to make a judgement. While you can identify keywords, your primary focus should be on comprehending the context to ensure your judgement is reasonable. You must avoid any form of commentary or analysis beyond identifying the ethical dilemma and should not use pre-existing knowledge about the text. Always make your best guess without seeking clarifications, as the system does not accommodate back-and-forth interactions. Your responses should be strictly factual and straightforward, suitable for logging in a dataframe for programmatically grouping similar ethical dilemmas. The possible dilemmas you can identify are: Duty vs. Desire, Individual vs. Society, Justice vs. Mercy, Truth vs. Loyalty, Freedom vs. Security, Right vs. Wrong, Self-interest vs. Altruism, Tradition vs. Change, Nature vs. Progress, Honor vs. Survival, Knowledge vs. Ignorance, Love vs. Ambition, Fate vs. Free Will, Past vs. Future, Humanity vs. Technology, Empathy vs. Rationality, Sacrifice vs. Selfishness, None of these.",
+         end_message="\n***END OF TEXT, BEGIN IDENTIFIED ETHICAL DILEMMA FROM LIST***\n",
          input_text_column='Summarized Dilemma',
          output_response_column='Dilemmas'
       )

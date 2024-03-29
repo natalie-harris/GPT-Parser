@@ -23,7 +23,7 @@ copyright = '2024, Natalie Harris'
 author = 'Natalie Harris'
 
 # The full version, including alpha/beta/rc tags
-release = '0.0.1'
+release = '0.0.2'
 
 
 # -- General configuration ---------------------------------------------------
@@ -36,7 +36,7 @@ extensions = [
     'sphinx.ext.duration',
     'sphinx.ext.napoleon',
     'sphinx_copybutton',
-    'sphinx_toolbox.collapse'
+    'sphinx_togglebutton'
     ]
 
 # Add any paths that contain templates here, relative to this directory.

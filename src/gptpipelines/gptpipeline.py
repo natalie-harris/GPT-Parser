@@ -94,7 +94,7 @@ class GPTPipeline:
 
         return self.default_model, self.default_context_window, self.default_temperature, self.default_safety_multiplier, self.default_timeout
     
-    def set_default_values(self, model=None, context_window=None, temperature=None, safety_multiplier=None, timeout=None):
+    def set_default_values(self, gpt_model=None, gpt_context_window=None, temperature=None, safety_multiplier=None, timeout=None):
         """
         Set default configuration values.
 
@@ -104,16 +104,11 @@ class GPTPipeline:
             A dictionary of default values to update.
         """
 
-        if model is not None:
-            self.default_model = model
-        if context_window is not None:
-            self.default_context_window = context_window
-        if temperature is not None:
-            self.default_temperature = temperature
-        if safety_multiplier is not None:
-            self.default_safety_multiplier = safety_multiplier
-        if timeout is not None:
-            self.default_timeout = timeout
+        self.default_model = gpt_model or None
+        self.default_context_window = gpt_context_window or None
+        self.default_temperature = temperature or None
+        self.default_safety_multiplier = safety_multiplier or None
+        self.default_timeout = timeout or None
 
     def _generate_primary_csv(self, folder_path, dest_csv_path=None, csv_file_name='files.csv', default_features={}):
         """
@@ -215,7 +210,7 @@ class GPTPipeline:
         entry = f'"{entry}"'
         return entry
         
-    def import_texts(self, folder_path, file_name, num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, max_files_at_once=None):
+    def import_texts(self, folder_path, file_name="files.csv", num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, max_files_at_once=None):
         """
         Import texts from a CSV file and populate DataFrames for file and text lists.
 
@@ -285,7 +280,7 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
 
-    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column=None, input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed'):
+    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, end_message=None, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column=None, input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed'):
         """
         Add a ChatGPT module to the pipeline.
 
@@ -327,7 +322,7 @@ class GPTPipeline:
             The name of the column indicating whether the output is completed.
         """
 
-        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
+        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, end_message=end_message, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, timeout=timeout, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column)
         self.modules[name] = gpt_module
 
     def add_code_module(self, name, process_function, input_df_names=[], output_df_names=[]):
@@ -674,7 +669,7 @@ class GPTPipeline:
             return None
         return dfs
 
-    def process_text(self, system_message, user_message, injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None, module_name=None):
+    def process_text(self, system_message, user_message, end_message="", injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None, module_name=None):
         """
         Process a single text through the GPT broker, handling defaults and injections.
 
@@ -735,12 +730,12 @@ class GPTPipeline:
             print("Inequivalent number of placeholders in system message and injections. Not injecting into system prompt to prevent errors. If you mean to have curly brace sets in your system prompt ({}), then escape them by wrapping them in another set of curly braces ({{}}).")
 
         # make sure breaking up into chunks is even possible given system message and examples token length
-        static_token_length = self.gpt_broker.get_tokenized_length(system_message, "", model, examples)
+        static_token_length = self.gpt_broker.get_tokenized_length(system_message, "", model, examples, end_message=end_message)
         if static_token_length >= int(model_context_window * safety_multiplier):
             print(f"The system message and examples are too long for the maximum token length ({int(model_context_window * safety_multiplier)})")
             return ['GPT API call failed.']
 
-        text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, safety_multiplier)
+        text_chunks = self.gpt_broker.split_message_to_lengths(system_message, user_message, model, model_context_window, examples, end_message, safety_multiplier)
         if max_chunks_per_text is not None:
             text_chunks = text_chunks[0:max_chunks_per_text]
 
@@ -754,7 +749,7 @@ class GPTPipeline:
 
         responses = []
         for chunk in text_chunks:
-            response = self.gpt_broker.get_chatgpt_response(self.LOG, system_message, chunk, model, model_context_window, temp, examples, timeout)
+            response = self.gpt_broker.get_chatgpt_response(self.LOG, system_message, chunk, model, model_context_window, end_message, temp, examples, timeout)
             responses.append((system_message, chunk, examples, response))
             pbar.update(1)
             pbar.refresh()
@@ -779,5 +774,11 @@ class GPTPipeline:
                 for output_df_name in module.output_df_names:
                     G.add_edge(class_type_str+name, 'DataFrame\n'+output_df_name)
 
+        for name, df_zip in self.dfs.items():
+            df = df_zip[0]
+            dest_folder = df_zip[1]
+            if dest_folder is not None:
+                G.add_edge('DataFrame\n'+name, 'Storage\n'+dest_folder)
+        
         # Print the ASCII representation of the graph
         print(graph_to_ascii(G))

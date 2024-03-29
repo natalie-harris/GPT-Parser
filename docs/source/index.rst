@@ -25,7 +25,6 @@ Quick Links
    concepts
    contributing
    faqs
-   changelog
 
 Introduction
 ------------

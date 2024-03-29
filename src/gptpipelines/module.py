@@ -4,8 +4,8 @@ import time
 from gptpipelines.helper_functions import get_incomplete_entries, truncate
 import inspect
 import warnings
-from transformers import pipeline as hf_pipeline
-from transformers import AutoTokenizer, AutoModelForCausalLM
+# from transformers import pipeline as hf_pipeline
+# from transformers import AutoTokenizer, AutoModelForCausalLM
 
 class Module(ABC):
     """
@@ -174,57 +174,55 @@ class Valve_Module(Module):
 
         return working
 
-class TransformersPipeline_Module(Module):
-    """
-    A generic class that allows the user to add transformers.pipeline objects
-    for various NLP tasks, with the ability to specify the model and tokenizer.
-    """
+# class TransformersPipeline_Module(Module):
+#     """
+#     A generic class that allows the user to add transformers.pipeline objects
+#     for various NLP tasks, with the ability to specify the model and tokenizer.
+#     """
 
-    def __init__(self, pipeline, task, model=None, tokenizer=None, framework='pt', **pipeline_kwargs):
-        """
-        Initializes the TransformersPipeline_Module instance with a specified NLP task,
-        and optionally with a specific model and tokenizer.
+#     def __init__(self, pipeline, task, model=None, tokenizer=None, framework='pt', **pipeline_kwargs):
+#         """
+#         Initializes the TransformersPipeline_Module instance with a specified NLP task,
+#         and optionally with a specific model and tokenizer.
 
-        Parameters:
-        - pipeline (GPTPipeline): The GPTPipeline instance to which the module belongs.
-        - task (str): The task to be performed by the transformers pipeline (e.g., 'sentiment-analysis').
-        - model (str, optional): The model ID or model instance to be used for the task.
-        - tokenizer (str, optional): The tokenizer ID or tokenizer instance to be used with the model.
-        - framework (str, optional): The framework to use ('pt' for PyTorch, 'tf' for TensorFlow).
-        - **pipeline_kwargs: Additional keyword arguments passed to the transformers pipeline.
-        """
-        super().__init__(pipeline, name=task)
-        # Initialize the Hugging Face pipeline with specified parameters
-        self.transformers_pipeline = hf_pipeline(task, model=model, tokenizer=tokenizer, framework=framework, **pipeline_kwargs)
+#         Parameters:
+#         - pipeline (GPTPipeline): The GPTPipeline instance to which the module belongs.
+#         - task (str): The task to be performed by the transformers pipeline (e.g., 'sentiment-analysis').
+#         - model (str, optional): The model ID or model instance to be used for the task.
+#         - tokenizer (str, optional): The tokenizer ID or tokenizer instance to be used with the model.
+#         - framework (str, optional): The framework to use ('pt' for PyTorch, 'tf' for TensorFlow).
+#         - **pipeline_kwargs: Additional keyword arguments passed to the transformers pipeline.
+#         """
+#         super().__init__(pipeline, name=task)
+#         # Initialize the Hugging Face pipeline with specified parameters
+#         self.transformers_pipeline = hf_pipeline(task, model=model, tokenizer=tokenizer, framework=framework, **pipeline_kwargs)
     
-    def process(self, input_texts):
-        """
-        Processes a list of input texts through the specified Hugging Face pipeline,
-        storing the output in a DataFrame.
+#     def process(self, input_texts):
+#         """
+#         Processes a list of input texts through the specified Hugging Face pipeline,
+#         storing the output in a DataFrame.
 
-        Parameters:
-        - input_texts (list of str): The input texts to be processed by the pipeline.
+#         Parameters:
+#         - input_texts (list of str): The input texts to be processed by the pipeline.
 
-        Returns:
-        - pd.DataFrame: A DataFrame with two columns: 'input_text' and 'result',
-                        where 'result' contains the output from the pipeline.
-        """
-        # Ensure input_texts is a list of strings
-        if not isinstance(input_texts, list):
-            raise ValueError("input_texts must be a list of strings.")
+#         Returns:
+#         - pd.DataFrame: A DataFrame with two columns: 'input_text' and 'result',
+#                         where 'result' contains the output from the pipeline.
+#         """
+#         # Ensure input_texts is a list of strings
+#         if not isinstance(input_texts, list):
+#             raise ValueError("input_texts must be a list of strings.")
         
-        # Process each text through the pipeline and collect results
-        results = [self.transformers_pipeline(text) for text in input_texts]
+#         # Process each text through the pipeline and collect results
+#         results = [self.transformers_pipeline(text) for text in input_texts]
 
-        # Create a DataFrame from the inputs and results
-        df = pd.DataFrame({
-            "input_text": input_texts,
-            "result": results
-        })
+#         # Create a DataFrame from the inputs and results
+#         df = pd.DataFrame({
+#             "input_text": input_texts,
+#             "result": results
+#         })
 
-        return df
-
-
+#         return df
 
 """
 LLM Modules take in a dataframe as input and write to a dataframe as output. 
@@ -335,7 +333,7 @@ class ChatGPT_Module(LLM_Module):
         The name of the column in the output DataFrame that marks whether the entry has been processed.
     """
 
-    def __init__(self, pipeline, input_df_name, output_df_name, prompt, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Full Text', input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed'):
+    def __init__(self, pipeline, input_df_name, output_df_name, prompt, end_message=None, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, input_text_column='Full Text', input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed'):
         """
         Initializes a ChatGPT_Module instance with specified configuration.
 
@@ -358,6 +356,7 @@ class ChatGPT_Module(LLM_Module):
 
         # important gpt request info
         self.prompt = prompt
+        self.end_message=end_message or ""
         self.examples = examples
         self.injection_columns = injection_columns
 
@@ -435,7 +434,7 @@ class ChatGPT_Module(LLM_Module):
 
             # ALSO CHECK IF SYSTEM MESSAGE + EXAMPLES >= CONTEXT LENGTH
 
-            responses = self.pipeline.process_text(self.prompt, text, injections, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier, self.max_chunks_per_text)
+            responses = self.pipeline.process_text(self.prompt, text, self.end_message, injections, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier, self.max_chunks_per_text)
 
             # we don't need to include system message or examples for singleprompt module since they are static
             for system_message, chunk, examples, response in responses:

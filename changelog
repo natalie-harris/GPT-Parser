@@ -1,0 +1,6 @@
+1. Added end message support because it turned out to be extremely useful
+2. Finished first draft of book analysis tutorial
+3. Drafted get started quickly page
+4. Fixed dependency conflict between sphinx_toolbox and textract, installed sphinx_togglebutton instead of toolbox
+5. Renamed default parameter names for ChatGPT to include `gpt_` before them for clarity
+6. Added default value ("files.csv) to file name for import_texts() method

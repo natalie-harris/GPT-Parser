@@ -51,7 +51,7 @@ class ChatGPTBroker:
             logging.getLogger("httpx").setLevel(logging.WARNING)
             logging.basicConfig(level=logging.INFO, format='%(message)s')
 
-    def get_tokenized_length(self, system_message, user_message, model, examples=[]):
+    def get_tokenized_length(self, system_message, user_message, model, examples=[], end_message=""):
         """
         Calculates the total number of tokens for a given set of messages and examples,
         based on the tokenization process of a specified model.
@@ -74,7 +74,7 @@ class ChatGPTBroker:
             The total number of tokens after tokenizing the combined messages and examples.
         """
         
-        total_text = system_message + user_message
+        total_text = system_message + user_message + end_message
 
         # Loop through the list of example dictionaries (if provided)
         # and append the content of each example to the input text.
@@ -91,7 +91,7 @@ class ChatGPTBroker:
         return num_tokens
     
     # safety multipliers limits max message length just in case tiktoken incorrectly splits tokens
-    def split_message_to_lengths(self, system_message, user_message, model, max_context_window, examples=[], safety_multiplier=1.0):
+    def split_message_to_lengths(self, system_message, user_message, model, max_context_window, examples=[], end_message="", safety_multiplier=1.0):
         """
         Splits a message into chunks that fit within a model's maximum context window, considering
         safety multipliers and additional examples.
@@ -117,18 +117,16 @@ class ChatGPTBroker:
             A list of message chunks, each fitting within the specified token limit.
         """
 
-        # print(f"This is the max context window: {max_context_window}")
-
         if safety_multiplier > 1.0:
             safety_multiplier = 1.0
         elif safety_multiplier <= 0:
             safety_multiplier = 0.01
 
-        static_token_length = self.get_tokenized_length(system_message, "", model, examples)
+        static_token_length = self.get_tokenized_length(system_message, "", model, examples, end_message=end_message)
         if static_token_length >= max_context_window * safety_multiplier:
             return []
 
-        total_token_length = self.get_tokenized_length(system_message, user_message, model, examples)
+        total_token_length = self.get_tokenized_length(system_message, user_message, model, examples, end_message=end_message)
         if total_token_length <= max_context_window * safety_multiplier:
             return [user_message]
         
@@ -160,7 +158,7 @@ class ChatGPTBroker:
         # else we need to split up the message into chunks. I may have a function that does this in original SBW parser
         return chunks
     
-    def get_chatgpt_response(self, LOG, system_message, user_message, model, model_context_window, temp=0, examples=[], timeout=15):
+    def get_chatgpt_response(self, LOG, system_message, user_message, model, model_context_window, end_message="", temp=0, examples=[], timeout=15):
         """
         Fetches a response from ChatGPT based on a user's message and a system message.
 
@@ -197,6 +195,9 @@ class ChatGPTBroker:
         if len(examples) > 0:
             new_messages.extend(examples)
         new_messages.append({"role": "user", "content": user_message})
+
+        if len(end_message) > 0:
+            new_messages.append({"role": "system", "content": end_message})
         
         # Flag to indicate whether a response has been successfully generated
         got_response = False
