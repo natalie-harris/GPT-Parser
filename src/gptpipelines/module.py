@@ -4,6 +4,9 @@ import time
 from gptpipelines.helper_functions import get_incomplete_entries, truncate
 import inspect
 import warnings
+import logging
+import textract
+from pdfminer.high_level import extract_text
 # from transformers import pipeline as hf_pipeline
 # from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -81,7 +84,7 @@ class Valve_Module(Module):
         The output DataFrame where texts are stored.
     """
 
-    def __init__(self, pipeline, files_list_df_name, text_list_df_name, max_at_once=None, num_texts_to_analyze=None, name=None):
+    def __init__(self, pipeline, files_list_df_name, text_list_df_name, max_at_once=None, num_texts_to_analyze=None, name=None, ocr_language='eng', pdf_method='pdftotext', min_pdf_extract_length=None):
         """
         Initializes a Valve_Module instance.
 
@@ -101,6 +104,11 @@ class Valve_Module(Module):
         self.output_df_name = text_list_df_name
         self.input_df = pipeline.get_df(files_list_df_name)
         self.output_df = pipeline.get_df(text_list_df_name)
+
+        self.ocr_language=ocr_language
+        self.pdf_method=pdf_method
+        self.min_pdf_extract_length=min_pdf_extract_length
+        self.verbose_extraction=self.pipeline.verbose_text_extraction_output
 
         # Make sure we don't try to access files that don't exist
         self.max_files_total = num_texts_to_analyze
@@ -138,6 +146,11 @@ class Valve_Module(Module):
 
         working = False
 
+        # only log verbose output if verbose_extraction is True
+        original_logging_level = logging.getLogger().getEffectiveLevel()
+        if not self.verbose_extraction:
+            logging.getLogger().setLevel(logging.ERROR)
+
         # get number of files in processing in text df by checking for unique instances of Source File where Completed = 0
         self.current_files = self.output_df[self.output_df['Completed'] == 0]['Source File'].nunique()
         while (self.current_files < self.max_files_at_once and self.total_ran_files < self.max_files_total):
@@ -157,8 +170,26 @@ class Valve_Module(Module):
             # Get the text at the file referenced in File Path
             entry = self.input_df.loc[row_index]
             path = entry['File Path']
-            with open(path, 'r', encoding='utf-8') as file:
-                file_contents = file.read()
+            extension = path[path.find("."):]
+            if extension in ['.txt', '.text']:
+                with open(path, 'r', encoding='utf-8') as file:
+                    file_contents = file.read()
+            
+            # extracting text from pdfs
+            elif extension == '.pdf' and self.pdf_method != 'tesseract':
+                if self.pdf_method == 'pdfminer':
+                    file_contents = extract_text(path)
+                else:
+                    file_contents = textract.process(path, method=self.pdf_method)
+                if self.min_pdf_extract_length is not None and len(file_contents) < self.min_pdf_extract_length:
+                    file_contents = textract.process(path, method='tesseract', language=self.ocr_language)
+            elif extension == '.pdf':
+                file_contents = textract.process(path, method=self.pdf_method, language=self.ocr_language)
+            
+            elif extension in ['gif', 'jpg', 'jpeg', 'png', 'tif', 'tiff']:
+                file_contents = textract.process(path, language=self.ocr_language)
+            else:
+                file_contents = textract.process(path)
 
             new_entry = [path, file_contents, 0]
             self.output_df.loc[len(self.output_df)] = new_entry
@@ -171,6 +202,9 @@ class Valve_Module(Module):
             # print(f"Output df: [[[\n{self.output_df}\n]]]")
 
         # print(f"{self.current_files} < {self.max_files_at_once};\t\t{self.total_ran_files} < {self.max_files_total}")
+
+        # set logging back to what it was
+        logging.getLogger().setLevel(original_logging_level)
 
         return working
 

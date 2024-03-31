@@ -31,22 +31,12 @@ Setup
 
 We'll be performing analysis on the top 20 children's fiction books downloaded from `Project Gutenberg <https://www.gutenberg.org/about/>`__. Download the books `here <https://drive.google.com/drive/folders/1UMsZpAgY7_c3py-Dpm5hRTupTbsgyv5_?usp=sharing>`__.
 
-Next, define the absolute path to the folder containing the books:
+Next, define the absolute paths to the folder containing the books, your OpenAI api key, and where you want your output data to go after processing:
 
 .. code-block:: python
 
    books_folder_path = "/path/to/your/books/"
-
-and the path to your OpenAI api key:
-
-.. code-block:: python
-
    openai_key_path = "/path/to/your/api/key"
-
-Lastly, we'll define where we want the output data to go. Add the path to where you want the output files saved.
-
-.. code-block:: python
-
    output_data_path = "/path/to/your/output/data"
 
 Then, we'll make a ``GPTPipeline`` object. You can give the ``GPTPipeline`` constructor the plaintext api key, but it's easier and more secure to just pass in the path to the api key:

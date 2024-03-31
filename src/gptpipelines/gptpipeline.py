@@ -43,7 +43,7 @@ class GPTPipeline:
         Default configuration values for the pipeline, including settings for API interactions.
     """
 
-    def __init__(self, api_key=None, path_to_api_key=None, organization=None, verbose_chatgpt_api=False, verbose_pipeline_output=False, model=None, context_window=None, temperature=0.0, safety_multiplier=0.95, timeout=15):
+    def __init__(self, api_key=None, path_to_api_key=None, organization=None, verbose_chatgpt_api=False, verbose_pipeline_output=False, verbose_text_extraction_output=False, model=None, context_window=None, temperature=0.0, safety_multiplier=0.95, timeout=15):
         """
         Initializes the GPTPipeline with the provided API key.
 
@@ -78,6 +78,7 @@ class GPTPipeline:
         self.default_temperature = temperature
         self.default_safety_multiplier = safety_multiplier
         self.default_timeout = timeout
+        self.verbose_text_extraction_output = verbose_text_extraction_output
 
         if not verbose_pipeline_output:
             warnings.formatwarning = lambda message, category, filename, lineno, line=None: f'\033[91m{category.__name__}:\033[0m {message}\n'
@@ -110,15 +111,18 @@ class GPTPipeline:
         self.default_safety_multiplier = safety_multiplier or None
         self.default_timeout = timeout or None
 
-    def _generate_primary_csv(self, folder_path, dest_csv_path=None, csv_file_name='files.csv', default_features={}):
+    def _generate_primary_csv(self, folder_path, dest_csv_path=None, csv_file_name='files.csv', default_features={}, file_extensions=None, include_csv=False):
         """
         Generates a CSV file listing files in a folder to be used as the first df in a GPTPipeline.
 
-        This function searches for text files (`.txt` and `.text`) in a specified folder, compiles their
+        This function searches for files of specified file types in a specified folder, compiles their
         file paths, and generates a CSV file with these paths and additional default features. If a CSV file
         with the specified name already exists at the destination path, the function returns `False` without
         creating a new file. Otherwise, it creates a new CSV file, populating it with the default feature values
         and the file paths of the text files found.
+
+        This function uses textract for retrieving text from files -> https://textract.readthedocs.io/en/stable/index.html
+        The valid file_extensions are those supported by textract.
 
         Parameters
         ----------
@@ -164,17 +168,77 @@ class GPTPipeline:
         if os.path.exists(full_csv_path):
             return False
 
+        valid_file_extensions = {
+            '.csv': False,
+            '.doc': False,
+            '.docx': False,
+            '.eml': False,
+            '.epub': False,
+            '.gif': False,
+            '.jpg': False,
+            '.jpeg': False,
+            '.json': False,
+            '.html': False,
+            '.htm': False,
+            '.mp3': False,
+            '.msg': False,
+            '.odt': False,
+            '.ogg': False,
+            '.pdf': False,
+            '.png': False,
+            '.pptx': False,
+            '.ps': False,
+            '.rtf': False,
+            '.tiff': False,
+            '.tif': False,
+            '.txt': False,
+            '.text': False,
+            '.wav': False,
+            '.xlsx': False,
+            '.xls': False
+        }
+        if file_extensions is None:
+            for extension in valid_file_extensions:
+                if extension != '.csv' or include_csv == True:
+                    valid_file_extensions[extension] = True
+        else:
+            for extension in file_extensions:
+
+                extension = extension.lower()
+                if not extension.startswith('.'):
+                    extension = '.' + extension
+                
+                if extension == '.jpg' or extension == '.jpeg':
+                    valid_file_extensions['.jpg'] = True
+                    valid_file_extensions['.jpeg'] = True
+                elif extension == '.html' or extension == '.htm':
+                    valid_file_extensions['.html'] = True
+                    valid_file_extensions['.htm'] = True
+                elif extension == '.tiff' or extension == '.tif':
+                    valid_file_extensions['.tif'] = True
+                    valid_file_extensions['.tiff'] = True
+                elif extension == '.text' or extension == '.txt':
+                    valid_file_extensions['.text'] = True
+                    valid_file_extensions['.txt'] = True
+                elif extension in valid_file_extensions:
+                    valid_file_extensions[extension] = True
+                
+                if include_csv:
+                    valid_file_extensions['.csv'] = True
+
         # Initialize the DataFrame with 'File Path' and 'Complete' columns first
         columns = ['File Path', 'Completed'] + list(default_features.keys())
         df = pd.DataFrame(columns=columns)
 
-        # Identify all .txt or .text files in the folder
+        # Identify all specified files in the folder
         rows_to_add = []
-        for file_path in glob.glob(f"{folder_path}/*.txt") + glob.glob(f"{folder_path}/*.text"):
-            # Create a new row with default values, setting 'File Path' and 'Complete'
-            new_row = {'File Path': file_path, 'Completed': 0}
-            new_row.update(default_features)
-            rows_to_add.append(new_row)
+        extensions = [extension for extension, valid in valid_file_extensions.items() if valid is True]
+        for extension in extensions:
+            for file_path in glob.glob(f"{folder_path}/*{extension}"):
+                # Create a new row with default values, setting 'File Path' and 'Complete'
+                new_row = {'File Path': file_path, 'Completed': 0}
+                new_row.update(default_features)
+                rows_to_add.append(new_row)
 
         # If there are no files, return False
         if not rows_to_add:
@@ -210,9 +274,13 @@ class GPTPipeline:
         entry = f'"{entry}"'
         return entry
         
-    def import_texts(self, folder_path, file_name="files.csv", num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, max_files_at_once=None):
+    def import_texts(self, folder_path, file_name="files.csv", num_texts_to_analyze=None, files_list_df_name="Files List", text_list_df_name="Text List", files_list_dest_folder=None, text_list_dest_folder=None, generate_text_csv=True, text_csv_dest_folder=None, max_files_at_once=None, file_extensions=None, ocr_language='eng', pdf_method='pdfminer', min_pdf_extract_length=None):
         """
         Import texts from a CSV file and populate DataFrames for file and text lists.
+
+        This function uses textract for retrieving text from files -> https://textract.readthedocs.io/en/stable/index.html
+        Some file types utilize OCR (tesseract-ocr), and some of these files allow for specifying a language -> https://textract.readthedocs.io/en/stable/python_package.html#additional-options
+        Find valid language codes here -> https://github.com/tesseract-ocr/tessdoc/blob/main/Data-Files-in-different-versions.md
 
         Parameters
         ----------
@@ -224,10 +292,9 @@ class GPTPipeline:
 
         if generate_text_csv is True:
             text_csv_dest_folder = text_csv_dest_folder or folder_path # if the user doesn't specify where the text csv should go, just put it in the folder with the texts
-            self._generate_primary_csv(folder_path=folder_path, dest_csv_path=text_csv_dest_folder, csv_file_name=file_name)
+            self._generate_primary_csv(folder_path=folder_path, dest_csv_path=text_csv_dest_folder, csv_file_name=file_name, file_extensions=file_extensions)
 
         path = os.path.join(folder_path, file_name)
-        print(path)
         
         files_df = pd.read_csv(path, sep=',')
         text_df = pd.DataFrame(columns=["Source File", "Full Text", "Completed"])
@@ -246,7 +313,7 @@ class GPTPipeline:
         # It should be ok to automatically generate a name and not let the user change it.
         valve_module_name = " ".join(["Valve Module for", text_list_df_name])
 
-        self.add_module(valve_module_name, Valve_Module(pipeline=self, num_texts_to_analyze=num_texts_to_analyze, files_list_df_name=files_list_df_name, text_list_df_name=text_list_df_name, max_at_once=max_files_at_once))
+        self.add_module(valve_module_name, Valve_Module(pipeline=self, num_texts_to_analyze=num_texts_to_analyze, files_list_df_name=files_list_df_name, text_list_df_name=text_list_df_name, max_at_once=max_files_at_once, ocr_language=ocr_language, pdf_method=pdf_method, min_pdf_extract_length=min_pdf_extract_length, name=valve_module_name))
 
     def import_csv(self, name, dest_folder): # dest_path must point to the folder that the csv file is located in
         """
