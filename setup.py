@@ -32,7 +32,9 @@ setup(
         'tiktoken>=0.6.0,<1.0.0',
         'asciinet>=0.3.1,<0.4.0',
         'networkx>=3.2.1,<4.0.0',
+        'geopy>=2.4.1',
+        'requests>=2.32.3',
         'textract @ git+https://github.com/natalie-harris/textract.git#egg=textract'  # Adjust the URL and branch as necessary
     ],
-    python_requires='>=3.8.0, <3.12.0'
+    python_requires='>=3.9.0, <3.12.0'
 )
