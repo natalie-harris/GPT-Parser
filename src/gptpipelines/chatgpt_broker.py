@@ -165,7 +165,7 @@ class ChatGPTBroker:
         # else we need to split up the message into chunks. I may have a function that does this in original SBW parser
         return chunks
     
-    def get_chatgpt_response(self, LOG, system_message, user_message, model, model_context_window, end_message="", temp=0, get_log_probabilities=False, examples=[], timeout=15, tokenizer=None):
+    def get_chatgpt_response(self, LOG, system_message, user_message, model, model_context_window, end_message="", temp=0, get_log_probabilities=False, examples=[], timeout=15, tokenizer=None, get_json_output=False, tools=[]):
         """
         Fetches a response from ChatGPT based on a user's message and a system message.
 
@@ -185,6 +185,11 @@ class ChatGPTBroker:
             A list of additional examples to provide context to the model. Defaults to an empty list.
         timeout : int, optional
             The timeout in seconds for waiting for a response from the API. Defaults to 15.
+        get_json_output : bool, optional
+            True turns on getting json output from chatgpt. Requires supplying toolss. JSON output is not parsed and is simply placed into df. Parsing into feature(s) requires the JSON_Parse module
+        tools : list or dict, optional
+            The json formats that must be supplied so ChatGPT knows what format to output. Can be either a list of functions (json format, dict) or just one json format (dict).
+            Json tool and name format is the same as OpenAI's tool format for function calling: https://platform.openai.com/docs/guides/function-calling
 
         Returns
         -------
@@ -218,16 +223,45 @@ class ChatGPTBroker:
         with logging_redirect_tqdm():
             while not got_response and retries < max_retries:
                 try:
+
+                    # Modify vars in case that call type is function
+                    tool_choice="none"
+                    response_format={"type": "text"}
+                    if get_json_output:
+                        tool_choice="required"
+                        response_format={"type": "json_object"}
+                        if isinstance(tools, dict):
+                            tools = [tools]
+                        elif not isinstance(tools, list):
+                            raise TypeError("tools must be either list of str or str")
+                        
+
                     # Attempt to get a response from the GPT model
                     response = self.client.chat.completions.create(model=model,
                     messages=new_messages,
                     temperature=temp,
                     logprobs=get_log_probabilities,
-                    timeout=timeout)
+                    timeout=timeout,
+                    response_format=response_format,
+                    tools=tools,
+                    tool_choice=tool_choice
+                    )
                     
                     # Extract the generated text from the API response
                     choices = response.choices[0]
-                    generated_text = choices.message.content
+                    generated_text = None
+                    if get_json_output:
+                        tool_calls = choices.message.tool_calls
+                        generated_text = []
+                        if tool_calls and len(tool_calls) > 0:
+                            for tool_call in tool_calls:
+                                tool_function = tool_call.function
+                                tool_function_str = str(json.loads(tool_function.arguments)).strip()
+                                if len(tool_function_str) > 0:
+                                    generated_text.append(json.loads(tool_function.arguments))
+                    else:
+                        generated_text = choices.message.content
+
                     log_probs = None
                     if get_log_probabilities:
                         log_probs = choices.logprobs.content
@@ -243,6 +277,7 @@ class ChatGPTBroker:
                             formatted_log_probs['log_probs'].append(log_prob.logprob)
                         log_probs = json.dumps(formatted_log_probs)
 
+                    # print(f"GENERATED TEXT: {generated_text}. TYPE: {type(generated_text)}. TYPE 0: {type(generated_text[0])}")
                     return generated_text, log_probs
                     
                 except openai.RateLimitError as err:
@@ -269,6 +304,6 @@ class ChatGPTBroker:
 
                 except openai.APIError as err:
                     # Handle generic API errors
-                    LOG.info("An error occurred. Retrying request.")
+                    LOG.info(f"An error occurred. Retrying request.\nError: {err}")
 
         return None

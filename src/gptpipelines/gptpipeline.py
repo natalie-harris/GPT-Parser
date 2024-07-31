@@ -1,4 +1,4 @@
-from gptpipelines.module import Module, Valve_Module, ChatGPT_Module, Code_Module, Duplication_Module, LLM_Module, Apply_Module, Filter_Module, Combination_Module, Drop_Module
+from gptpipelines.module import Module, Valve_Module, ChatGPT_Module, Code_Module, Duplication_Module, LLM_Module, Apply_Module, Filter_Module, Combination_Module, Drop_Module, JSON_Parse_Module
 from gptpipelines.chatgpt_broker import ChatGPTBroker
 from gptpipelines.helper_functions import truncate, all_entries_are_true
 from pathlib import Path
@@ -247,6 +247,8 @@ class GPTPipeline:
                 new_row.update(default_features)
                 rows_to_add.append(new_row)
 
+        
+
         # If there are no files, return False
         if not rows_to_add:
             return False
@@ -354,7 +356,7 @@ class GPTPipeline:
             raise TypeError("Input parameter must be a module")
         self.modules[name] = module
     
-    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, end_message=None, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, loop_function=None, wrap=False, wrap_label=None, get_log_probabilities=False, input_text_column=None, input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed', output_log_probabilities_column=None, include_user_message=True):
+    def add_chatgpt_module(self, name, input_df_name, output_df_name, prompt, end_message=None, injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, loop_function=None, wrap=False, wrap_label=None, get_log_probabilities=False, input_text_column=None, input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_completed_column='Completed', output_log_probabilities_column=None, include_user_message=True, get_json_output=False, tools=[]):
         """
         Add a ChatGPT module to the pipeline.
 
@@ -394,9 +396,14 @@ class GPTPipeline:
             The name of the column for the GPT response in the output DataFrame.
         output_completed_column : str, optional
             The name of the column indicating whether the output is completed.
+        get_json_output : bool, optional
+            True turns on getting json output from chatgpt. Requires supplying toolss. JSON output is not parsed and is simply placed into df. Parsing into feature(s) requires the JSON_Parse module
+        tools : list or dict, optional
+            The json formats that must be supplied so ChatGPT knows what format to output. Can be either a list of functions (json format, dict) or just one json format (dict).
+            Json tool and name format is the same as OpenAI's tool format for function calling: https://platform.openai.com/docs/guides/function-calling
         """
 
-        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, end_message=end_message, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, timeout=timeout, loop_function=loop_function, wrap=wrap, wrap_label=wrap_label, get_log_probabilities=get_log_probabilities, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column, output_log_probabilities_column=output_log_probabilities_column, include_user_message=include_user_message)
+        gpt_module = ChatGPT_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, prompt=prompt, end_message=end_message, injection_columns=injection_columns, examples=examples, model=model, context_window=context_window, temperature=temperature, safety_multiplier=safety_multiplier, max_chunks_per_text=max_chunks_per_text, timeout=timeout, loop_function=loop_function, wrap=wrap, wrap_label=wrap_label, get_log_probabilities=get_log_probabilities, input_text_column=input_text_column, input_completed_column=input_completed_column, output_text_column=output_text_column, output_response_column=output_response_column, output_completed_column=output_completed_column, output_log_probabilities_column=output_log_probabilities_column, include_user_message=include_user_message, get_json_output=get_json_output, tools=tools)
         self.modules[name] = gpt_module
 
     def add_code_module(self, name, process_function, input_df_names=[], output_df_names=[]):
@@ -456,6 +463,11 @@ class GPTPipeline:
 
         drop_module = Drop_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, drop_columns=drop_columns, input_completed_column=input_completed_column, delete=delete)
         self.modules[name] = drop_module
+
+    def add_json_parse_module(self, name, input_df_name, output_df_name, keys, input_text_column, input_completed_column='Completed', output_data_column=None, output_text_columns=None, output_completed_column='Completed'):
+    
+        json_parse_module = JSON_Parse_Module(pipeline=self, input_df_name=input_df_name, output_df_name=output_df_name, keys=keys, input_text_column=input_text_column, input_completed_column=input_completed_column, output_data_column=output_data_column, output_text_columns=output_text_columns, output_completed_column=output_completed_column)
+        self.modules[name] = json_parse_module
 
     def add_dfs(self, names, dest_folder=None, features={}):
         """
@@ -600,6 +612,10 @@ class GPTPipeline:
                     finished_setup[module] = result
                     made_progress = result or made_progress
                 elif isinstance(self.modules[module], Drop_Module) and finished_setup[module] is not True:
+                    result = self.modules[module].setup_dfs()
+                    finished_setup[module] = result
+                    made_progress = result or made_progress
+                elif isinstance(self.modules[module], JSON_Parse_Module) and finished_setup[module] is not True:
                     result = self.modules[module].setup_dfs()
                     finished_setup[module] = result
                     made_progress = result or made_progress
@@ -803,7 +819,7 @@ class GPTPipeline:
             return None
         return dfs
 
-    def process_text(self, system_message, user_message, end_message="", injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None, module_name=None, loop_function=None, wrap=False, get_log_probabilities=False):
+    def process_text(self, system_message, user_message, end_message="", injections=[], model=None, model_context_window=None, temp=None, examples=[], timeout=None, safety_multiplier=None, max_chunks_per_text=None, module_name=None, loop_function=None, wrap=False, get_log_probabilities=False, get_json_output=False, tools=[]):
         """
         Process a single text through the GPT broker, handling defaults and injections.
 
@@ -884,7 +900,10 @@ class GPTPipeline:
         valid_loop_function = loop_function is not None and callable(loop_function)
 
         for chunk in text_chunks:
-            response, log_probs = self.gpt_broker.get_chatgpt_response(LOG=self.LOG, system_message=system_message, user_message=chunk, model=model, model_context_window=model_context_window, end_message=end_message, temp=temp, examples=examples, timeout=timeout, get_log_probabilities=get_log_probabilities, tokenizer=self.tokenizer)
+            response, log_probs = self.gpt_broker.get_chatgpt_response(LOG=self.LOG, system_message=system_message, user_message=chunk, model=model, model_context_window=model_context_window, end_message=end_message, temp=temp, examples=examples, timeout=timeout, get_log_probabilities=get_log_probabilities, tokenizer=self.tokenizer, get_json_output=get_json_output, tools=tools)
+            # print("\n\n\n\n\n\n\nGPITPIPELINES")
+            # print(response, type(response))
+
             responses.append((system_message, chunk, examples, response, log_probs))
             pbar.update(1)
             pbar.refresh()
@@ -902,6 +921,7 @@ class GPTPipeline:
             return responses[-1]
 
         return responses
+
     
     def visualize_pipeline(self):
         # Create a networkx graph
@@ -931,6 +951,9 @@ class GPTPipeline:
                 G.add_edge('DataFrame\n'+module.input_df_name, class_type_str+name)
                 G.add_edge(class_type_str+name, 'DataFrame\n'+module.output_df_name)
             elif issubclass(class_type, Drop_Module):
+                G.add_edge('DataFrame\n'+module.input_df_name, class_type_str+name)
+                G.add_edge(class_type_str+name, 'DataFrame\n'+module.output_df_name)
+            elif issubclass(class_type, JSON_Parse_Module):
                 G.add_edge('DataFrame\n'+module.input_df_name, class_type_str+name)
                 G.add_edge(class_type_str+name, 'DataFrame\n'+module.output_df_name)
 

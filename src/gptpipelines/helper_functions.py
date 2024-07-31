@@ -1,3 +1,5 @@
+import re
+
 def truncate(string, max_length):
     """
     Truncates a string to a maximum specified length, appending "..." if truncation occurs. The maximum length includes the appended '...'.
@@ -93,3 +95,23 @@ def get_unique_columns_and_dtypes(dfs):
     unique_columns_and_dtypes_list = [(col, dtype) for col, dtype in unique_columns_and_dtypes.items()]
     
     return unique_columns_and_dtypes_list
+
+# Used for the JSON_Parse_Module so it can find lists of keys that cooccur in dictionaries in json structs
+def findkeys(node, kvs):
+    if isinstance(node, list):
+        for i in node:
+            for x in findkeys(i, kvs):
+               yield x
+    elif isinstance(node, dict):
+        has_kvs = True
+        for kv in kvs:
+            if kv not in node:
+                has_kvs = False
+        if has_kvs:
+            values = []
+            for kv in kvs:
+                values.append(node[kv])
+            yield values
+        for j in node.values():
+            for x in findkeys(j, kvs):
+                yield x

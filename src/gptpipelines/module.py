@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 import time
-from gptpipelines.helper_functions import get_incomplete_entries, truncate, get_unique_columns_and_dtypes
+from gptpipelines.helper_functions import get_incomplete_entries, truncate, get_unique_columns_and_dtypes, findkeys
 import inspect
 import warnings
 import logging
 import textract
 from pdfminer.high_level import extract_text
+import json
 
 class Module(ABC):
     """
@@ -320,9 +321,14 @@ class ChatGPT_Module(LLM_Module):
         The name of the column in the output DataFrame for storing the GPT model's response.
     output_completed_column : str
         The name of the column in the output DataFrame that marks whether the entry has been processed.
+    get_json_output : bool, optional
+        True turns on getting json output from chatgpt. Requires supplying toolss. JSON output is not parsed and is simply placed into df. Parsing into feature(s) requires the JSON_Parse module
+    tools : list or dict, optional
+        The json formats that must be supplied so ChatGPT knows what format to output. Can be either a list of functions (json format, dict) or just one json format (dict).
+        Json tool and name format is the same as OpenAI's tool format for function calling: https://platform.openai.com/docs/guides/function-calling
     """
 
-    def __init__(self, pipeline, input_df_name, output_df_name, prompt, end_message="", injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, loop_function=None, wrap=False, wrap_label=None, include_user_message=True, get_log_probabilities=False, input_text_column='Full Text', input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_log_probabilities_column=None, output_completed_column='Completed'):
+    def __init__(self, pipeline, input_df_name, output_df_name, prompt, end_message="", injection_columns=[], examples=[], model=None, context_window=None, temperature=None, safety_multiplier=None, max_chunks_per_text=None, timeout=None, loop_function=None, wrap=False, wrap_label=None, include_user_message=True, get_log_probabilities=False, input_text_column='Full Text', input_completed_column='Completed', output_text_column=None, output_response_column='Response', output_log_probabilities_column=None, output_completed_column='Completed', get_json_output=False, tools=[]):
         """
         Initializes a ChatGPT_Module instance with specified configuration.
 
@@ -344,7 +350,8 @@ class ChatGPT_Module(LLM_Module):
         self.output_completed_column = output_completed_column
         self.output_log_probabilities_column = output_log_probabilities_column or f"{self.output_response_column} Log Probabilities"
 
-        
+        self.get_json_output = get_json_output
+        self.tools = tools
 
         # important gpt request info
         self.prompt = prompt
@@ -391,7 +398,10 @@ class ChatGPT_Module(LLM_Module):
             self.pipeline.dfs[self.output_df_name][0][feature] = pd.Series(dtype=dtype)
 
         self.pipeline.dfs[self.output_df_name][0][self.output_text_column] = pd.Series(dtype="string")
-        self.pipeline.dfs[self.output_df_name][0][self.output_response_column] = pd.Series(dtype="string")
+        if self.get_json_output:
+            self.pipeline.dfs[self.output_df_name][0][self.output_response_column] = pd.Series(dtype="object")
+        else:
+            self.pipeline.dfs[self.output_df_name][0][self.output_response_column] = pd.Series(dtype="string")
         self.pipeline.dfs[self.output_df_name][0][self.output_completed_column] = pd.Series(dtype="int")
         
         if self.get_log_probabilities:
@@ -432,7 +442,7 @@ class ChatGPT_Module(LLM_Module):
 
             # print(truncate(text, 49))
 
-            responses = self.pipeline.process_text(self.prompt, text, self.end_message, injections, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier, self.max_chunks_per_text, self.loop_function, self.wrap, get_log_probabilities=self.get_log_probabilities)
+            responses = self.pipeline.process_text(self.prompt, text, self.end_message, injections, self.model, self.context_window, self.temperature, self.examples, self.timeout, self.safety_multiplier, self.max_chunks_per_text, self.loop_function, self.wrap, get_log_probabilities=self.get_log_probabilities, get_json_output=self.get_json_output, tools=self.tools)
 
             if len(responses) > 0 and self.wrap == True:
                 r_prompt = responses[0][0]
@@ -453,8 +463,6 @@ class ChatGPT_Module(LLM_Module):
                     response += next_response
                     log_probs += next_log_probs
 
-
-
                 # print(truncate(response, 49))
 
                 new_responses = [(r_prompt, r_text, r_examples, response, log_probs)]
@@ -473,7 +481,11 @@ class ChatGPT_Module(LLM_Module):
 
                 # Add the new data
                 new_entry_df[self.output_text_column] = chunk
+                # print("\n\n\n\n\nCHATGPTPPTPPTPTPP")
+                # print(response, type(response), len(response))
                 new_entry_df[self.output_response_column] = response
+                # print(new_entry_df[self.output_response_column])
+                # print(type(new_entry_df[self.output_response_column]))
                 new_entry_df[self.output_completed_column] = 0
                 if self.get_log_probabilities:
                     new_entry_df[self.output_log_probabilities_column] = log_probs
@@ -488,12 +500,112 @@ class ChatGPT_Module(LLM_Module):
                         output_df.at[next_index, col] = str(new_entry_df[col].values[0])
                     else:
                         output_df.at[next_index, col] = new_entry_df[col].values[0]
+                        # print(new_entry_df[col].values[0], type(new_entry_df[col].values[0]))
 
             if len(responses) != 0:
                 input_df.at[entry_index, self.input_completed_column] = 1
                 working = True
 
         return working     
+
+class JSON_Parse_Module(Module):
+    def __init__(self, pipeline, input_df_name, output_df_name, keys, input_text_column, input_completed_column='Completed', output_data_column=None, output_text_columns=None, output_completed_column='Completed'):
+        
+        super().__init__(pipeline=pipeline)
+
+        self.input_df_name=input_df_name
+        self.output_df_name=output_df_name
+        self.keys=keys
+        self.input_text_column=input_text_column
+        self.input_completed_column=input_completed_column
+        self.output_data_column=output_data_column or self.output_df_name + "_JSON_Data"
+        self.output_text_columns=output_text_columns or self.keys
+        self.output_completed_column=output_completed_column
+
+        # Check output text columns to make sure they are correct format
+        if len(keys) != len(self.output_text_columns):
+            raise ValueError("output_text_columns must be same length as keys")
+
+    def setup_dfs(self):
+        self.input_df = self.pipeline.get_df(self.input_df_name)
+        self.output_df = self.pipeline.get_df(self.output_df_name)
+        
+        if self.input_text_column not in self.input_df.columns:
+            return False
+        elif self.input_completed_column not in self.input_df.columns:
+            return False
+        
+        features_dtypes = self.pipeline.dfs[self.input_df_name][0].dtypes
+        features_with_dtypes = list(features_dtypes.items())
+
+        features = []
+        dtypes = []
+
+        # Iterate over each item in features_dtypes to separate names and types
+        for feature, dtype in features_with_dtypes:
+            if feature != self.input_completed_column:
+                features.append(feature)
+                dtypes.append(dtype)
+
+        for feature, dtype in zip(features, dtypes):
+            self.pipeline.dfs[self.output_df_name][0][feature] = pd.Series(dtype=dtype)
+
+        self.pipeline.dfs[self.output_df_name][0][self.output_data_column] = pd.Series(dtype="string")
+        for output_text_column in self.output_text_columns:
+            self.pipeline.dfs[self.output_df_name][0][output_text_column] = pd.Series(dtype="int")
+        self.pipeline.dfs[self.output_df_name][0][self.output_completed_column] = pd.Series(dtype="int")
+
+        return True
+
+    def process(self):
+        working = False
+
+        input_df = self.pipeline.get_df(self.input_df_name)
+        output_df = self.pipeline.get_df(self.output_df_name)
+        incomplete_df = get_incomplete_entries(input_df, self.input_completed_column)
+
+        if len(incomplete_df) <= 0:
+            return working
+
+        for entry_index in incomplete_df.index:
+            entry = input_df.iloc[entry_index]
+            json_inputs = entry[self.input_text_column]
+
+            print("\n\n\n\n\n\nJSONONONONONNOONN")
+            # print(json_inputs, type(json_inputs))
+
+            # for json_input in json_inputs:
+                # print(json_input, type(json_input))
+
+                # search json (now python dict) for dictionaries where all user-supplied keys are present.
+                # for each of these dicts, save all desired key values to their keys' output columns
+            desired_values_list = list(findkeys(json_inputs, self.keys))
+
+            for desired_values in desired_values_list:
+                new_entry_df = entry.to_frame().transpose().copy()
+                new_entry_df = new_entry_df.drop(columns=[self.input_completed_column])
+                new_entry_df[self.output_data_column] = json.dumps(json_inputs)
+                for i in range(len(self.output_text_columns)):
+                    output_text_column = self.output_text_columns[i]
+                    new_entry_df[output_text_column] = desired_values[i]
+                new_entry_df[self.output_completed_column] = 0
+
+                # Identify the next index for output_df
+                next_index = len(output_df)
+                
+                # Iterate over columns in new_entry_df to add them to output_df
+                for col in new_entry_df.columns:
+                    # Ensure the value type matches the column type in output_df
+                    if pd.api.types.is_string_dtype(output_df[col]):
+                        output_df.at[next_index, col] = str(new_entry_df[col].values[0])
+                    else:
+                        output_df.at[next_index, col] = new_entry_df[col].values[0]
+
+            if len(desired_values_list) >= 1:
+                    input_df.at[entry_index, self.input_completed_column] = 1
+                    working = True
+
+        return working
 
 """
 Code Modules can take in zero or more dataframes as input and write to multiple dataframes as output. They can be in any format
